@@ -1,13 +1,28 @@
 
-  # Loan Management System Blueprint
+  # Loan Management System 
 
-  This is a code bundle for Loan Management System Blueprint. The original project is available at https://www.figma.com/design/63SuZxAmMSIg14TW4XAzJR/Loan-Management-System-Blueprint.
+    ## Quick start guide
 
-  ## Running the code
+    1. Clone the repository.
+    2. Install dependencies:
 
-  Run `npm i` to install the dependencies.
+      ```
+      npm install
+      ```
 
-  Run `npm run dev` to start the development server.
+    3. Create a MySQL database (example name: `lms`).
+    4. Create a `.env` file in the project root with the values below.
+    5. Start the API server:
+
+      ```
+      npm run server
+      ```
+
+    6. Start the frontend:
+
+      ```
+      npm run dev
+      ```
 
   ## API server (MySQL)
 
@@ -30,6 +45,18 @@
   - `DB_NAME` (e.g., `lms`)
   - `DB_PORT` (optional, default `3306`)
   - `API_PORT` (optional, default `5174`)
+
+  Example `.env`:
+
+  ```
+  DB_HOST=localhost
+  DB_USER=root
+  DB_PASSWORD=
+  DB_NAME=lms
+  DB_PORT=3306
+  API_PORT=5174
+  VITE_API_URL=http://localhost:5174
+  ```
 
   The server will auto-create tables on startup. A reference schema is in [server/schema.sql](server/schema.sql).
 
