@@ -119,7 +119,7 @@ async function init() {
       email VARCHAR(150) NOT NULL UNIQUE,
       password VARCHAR(255) NOT NULL,
       createdAt VARCHAR(30) NOT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      status TINYINT(1) NOT NULL DEFAULT 1,
       archivedAt VARCHAR(30)
     )
   `);
@@ -174,7 +174,7 @@ async function init() {
   await addColumnIfMissing('borrowers', 'routingNumber VARCHAR(50)');
   await addColumnIfMissing('borrowers', 'password VARCHAR(255)');
   await addColumnIfMissing('borrowers', 'passwordUpdatedAt VARCHAR(30)');
-  await addColumnIfMissing('users', "status VARCHAR(20) NOT NULL DEFAULT 'active'");
+  await addColumnIfMissing('users', 'status TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('users', 'archivedAt VARCHAR(30)');
 
   const roles = ['admin', 'loan_officer', 'cashier', 'borrower', 'auditor'];

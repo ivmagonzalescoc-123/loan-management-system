@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(150) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
   createdAt VARCHAR(30) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  status TINYINT(1) NOT NULL DEFAULT 1,
   archivedAt VARCHAR(30)
 );
 
