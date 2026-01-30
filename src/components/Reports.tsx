@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User } from '../App';
 import { BarChart3, PieChart, TrendingUp, Download, Calendar, Shield } from 'lucide-react';
 import { useAuditLogs, useBorrowers, useLoanApplications, useLoans, usePayments } from '../lib/useApiData';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import * as XLSX from 'xlsx';
+import { formatPhp } from '../lib/currency';
 
 interface ReportsProps {
   user: User;
@@ -18,6 +19,14 @@ export function Reports({ user }: ReportsProps) {
   const [selectedReport, setSelectedReport] = useState<'portfolio' | 'delinquency' | 'audit'>('portfolio');
   const [dateRange, setDateRange] = useState('month');
   const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx'>('csv');
+
+  const canViewAuditLogs = user.role === 'admin' || user.role === 'auditor';
+
+  useEffect(() => {
+    if (!canViewAuditLogs && selectedReport === 'audit') {
+      setSelectedReport('portfolio');
+    }
+  }, [canViewAuditLogs, selectedReport]);
 
   const now = new Date();
   const getRangeStart = (range: string) => {
@@ -207,6 +216,11 @@ export function Reports({ user }: ReportsProps) {
   };
 
   const handleExport = () => {
+    if (selectedReport === 'audit' && !canViewAuditLogs) {
+      alert('You do not have permission to export audit logs.');
+      return;
+    }
+
     const filename = getExportFileName();
 
     if (selectedReport === 'portfolio') {
@@ -274,6 +288,11 @@ export function Reports({ user }: ReportsProps) {
     }
 
     if (selectedReport === 'audit') {
+      if (!canViewAuditLogs) {
+        alert('You do not have permission to view audit logs.');
+        return;
+      }
+
       const auditRows = filteredAuditLogs.map(log => ({
         timestamp: new Date(log.timestamp).toLocaleString(),
         userName: log.userName,
@@ -326,15 +345,17 @@ export function Reports({ user }: ReportsProps) {
             <TrendingUp className="w-4 h-4" />
             Delinquency Report
           </button>
-          <button
-            onClick={() => setSelectedReport('audit')}
-            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-              selectedReport === 'audit' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            Audit Logs
-          </button>
+          {canViewAuditLogs && (
+            <button
+              onClick={() => setSelectedReport('audit')}
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                selectedReport === 'audit' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              Audit Logs
+            </button>
+          )}
           <div className="ml-auto flex items-center gap-3">
             <select
               value={dateRange}
@@ -369,17 +390,17 @@ export function Reports({ user }: ReportsProps) {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-xs text-gray-600 mb-1">Total Disbursed</div>
-          <div className="text-xl text-gray-900">${totalDisbursed.toLocaleString()}</div>
+          <div className="text-xl text-gray-900">{formatPhp(totalDisbursed)}</div>
           <div className="text-xs text-green-600 mt-1">+15% vs last period</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-xs text-gray-600 mb-1">Total Outstanding</div>
-          <div className="text-xl text-gray-900">${totalOutstanding.toLocaleString()}</div>
+          <div className="text-xl text-gray-900">{formatPhp(totalOutstanding)}</div>
           <div className="text-xs text-red-600 mt-1">-5% vs last period</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-xs text-gray-600 mb-1">Total Collected</div>
-          <div className="text-xl text-gray-900">${totalCollected.toLocaleString()}</div>
+          <div className="text-xl text-gray-900">{formatPhp(totalCollected)}</div>
           <div className="text-xs text-green-600 mt-1">+8% vs last period</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -407,7 +428,14 @@ export function Reports({ user }: ReportsProps) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip
+                  formatter={(value: unknown, name: string) => {
+                    if (name === 'Disbursed' || name === 'Collected') {
+                      return [formatPhp(Number(value)), name];
+                    }
+                    return [value as any, name];
+                  }}
+                />
                 <Legend />
                 <Line type="monotone" dataKey="disbursed" stroke="#3b82f6" name="Disbursed" strokeWidth={2} />
                 <Line type="monotone" dataKey="collected" stroke="#10b981" name="Collected" strokeWidth={2} />
@@ -468,10 +496,17 @@ export function Reports({ user }: ReportsProps) {
                 <XAxis dataKey="range" />
                 <YAxis yAxisId="left" orientation="left" stroke="#3b82f6" />
                 <YAxis yAxisId="right" orientation="right" stroke="#ef4444" />
-                <Tooltip />
+                <Tooltip
+                  formatter={(value: unknown, name: string) => {
+                    if (name === 'Amount (₱)') {
+                      return [formatPhp(Number(value)), name];
+                    }
+                    return [value as any, name];
+                  }}
+                />
                 <Legend />
                 <Bar yAxisId="left" dataKey="count" fill="#3b82f6" name="Number of Loans" />
-                <Bar yAxisId="right" dataKey="amount" fill="#ef4444" name="Amount ($)" />
+                <Bar yAxisId="right" dataKey="amount" fill="#ef4444" name="Amount (₱)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -480,7 +515,7 @@ export function Reports({ user }: ReportsProps) {
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="text-sm text-red-900 mb-1">Total Delinquent</div>
               <div className="text-2xl text-red-900">{totalDelinquentCount} loans</div>
-              <div className="text-xs text-red-700 mt-1">${totalDelinquentAmount.toLocaleString()} outstanding</div>
+              <div className="text-xs text-red-700 mt-1">{formatPhp(totalDelinquentAmount)} outstanding</div>
             </div>
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <div className="text-sm text-yellow-900 mb-1">Delinquency Rate</div>
@@ -516,7 +551,7 @@ export function Reports({ user }: ReportsProps) {
                       <td className="px-6 py-4 text-sm text-gray-900">{loan.id}</td>
                       <td className="px-6 py-4 text-sm text-gray-900">{loan.borrowerName}</td>
                       <td className="px-6 py-4 text-sm text-red-600">{loan.daysOverdue} days</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">${loan.outstandingBalance.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.outstandingBalance)}</td>
                       <td className="px-6 py-4 text-sm text-gray-900">{loan.nextDueDate}</td>
                       <td className="px-6 py-4">
                         <span className="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-700">
@@ -540,7 +575,7 @@ export function Reports({ user }: ReportsProps) {
       )}
 
       {/* Audit Logs */}
-      {selectedReport === 'audit' && (
+      {canViewAuditLogs && selectedReport === 'audit' && (
         <div className="bg-white rounded-lg border border-gray-200">
           <div className="p-6 border-b border-gray-200">
             <h3 className="text-gray-900 flex items-center gap-2">

@@ -1,7 +1,8 @@
-import { X, TrendingUp, TrendingDown, DollarSign, Calendar, Briefcase } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, PhilippinePeso, Calendar, Briefcase } from 'lucide-react';
 import { Borrower } from '../lib/types';
 import { useEffect, useState } from 'react';
 import { getBorrowerCreditScore } from '../lib/api';
+import { formatPhp } from '../lib/currency';
 
 interface BorrowerDetailsModalProps {
   borrower: Borrower;
@@ -115,8 +116,8 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
                 <div>
                   <div className="text-xs text-gray-500">Monthly Income</div>
                   <div className="text-sm text-gray-900 flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-gray-400" />
-                    ${borrower.monthlyIncome.toLocaleString()}
+                    <PhilippinePeso className="w-4 h-4 text-gray-400" />
+                    {formatPhp(borrower.monthlyIncome)}
                   </div>
                 </div>
                 <div>
@@ -221,7 +222,7 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
                   <div className="text-xs text-gray-500">Active Loans</div>
                 </div>
                 <div>
-                  <div className="text-2xl text-gray-900">${stats.totalBorrowed.toLocaleString()}</div>
+                  <div className="text-2xl text-gray-900">{formatPhp(stats.totalBorrowed)}</div>
                   <div className="text-xs text-gray-500">Total Borrowed</div>
                 </div>
               </div>

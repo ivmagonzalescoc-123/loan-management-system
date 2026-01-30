@@ -10,6 +10,7 @@ import { UserManagement } from "./components/UserManagement";
 import { BorrowerProfile } from "./components/BorrowerProfile";
 import { BorrowerLoanHistory } from "./components/BorrowerLoanHistory";
 import { BorrowerPaymentHistory } from "./components/BorrowerPaymentHistory";
+import logoUrl from "../logo.png";
 import {
   LayoutDashboard,
   Users,
@@ -109,9 +110,9 @@ export default function App() {
     },
     {
       id: "reports" as View,
-      label: "Reports & Audit",
+      label: "Reports",
       icon: BarChart3,
-      roles: ["admin", "auditor"],
+      roles: ["admin", "auditor", "loan_officer"],
     },
     {
       id: "profile" as View,
@@ -138,9 +139,17 @@ export default function App() {
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-gray-200">
         <div className="p-6 border-b border-gray-200">
-          <h1 className="font-semibold text-gray-900">
-            Loan Management System
-          </h1>
+          <div className="flex items-center gap-3">
+            <img
+              src={logoUrl}
+              alt="Loan Management System logo"
+              className="w-8 h-8 object-contain"
+              loading="eager"
+            />
+            <h1 className="font-semibold text-gray-900 leading-tight">
+              Loan Management System
+            </h1>
+          </div>
           <p className="text-sm text-gray-500 mt-1">
             {currentUser.name}
           </p>

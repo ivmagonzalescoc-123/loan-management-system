@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { User } from '../App';
-import { Search, Plus, CheckCircle, Wallet } from 'lucide-react';
+import { Search, CheckCircle, Wallet, FileText } from 'lucide-react';
 import { useLoanApplications, useLoans } from '../lib/useApiData';
-import { LoanApplication } from '../lib/types';
+import { Loan, LoanApplication } from '../lib/types';
 import { DisbursementForm } from './DisbursementForm';
+import { formatPhp } from '../lib/currency';
+import { DisbursementReceiptModal } from './DisbursementReceiptModal';
 
 interface DisbursementsProps {
   user: User;
@@ -15,6 +17,7 @@ export function Disbursements({ user }: DisbursementsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDisbursementForm, setShowDisbursementForm] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<LoanApplication | null>(null);
+  const [selectedLoanForReceipt, setSelectedLoanForReceipt] = useState<Loan | null>(null);
 
   // Get approved applications that haven't been disbursed yet
   const readyForDisbursement = loanApplications.filter(
@@ -49,11 +52,11 @@ export function Disbursements({ user }: DisbursementsProps) {
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-600 mb-1">Total Disbursed</div>
-          <div className="text-2xl text-gray-900">${totalDisbursed.toLocaleString()}</div>
+          <div className="text-2xl text-gray-900">{formatPhp(totalDisbursed)}</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-600 mb-1">Total Outstanding</div>
-          <div className="text-2xl text-gray-900">${totalOutstanding.toLocaleString()}</div>
+          <div className="text-2xl text-gray-900">{formatPhp(totalOutstanding)}</div>
         </div>
       </div>
 
@@ -76,7 +79,7 @@ export function Disbursements({ user }: DisbursementsProps) {
                   </div>
                 </div>
                 <div className="text-right mr-6">
-                  <div className="text-lg text-gray-900">${app.approvedAmount?.toLocaleString()}</div>
+                  <div className="text-lg text-gray-900">{formatPhp(app.approvedAmount)}</div>
                   <div className="text-xs text-gray-500">{app.termMonths} months @ {app.interestRate}%</div>
                 </div>
                 <button 
@@ -124,6 +127,7 @@ export function Disbursements({ user }: DisbursementsProps) {
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Monthly Payment</th>
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Disbursed Date</th>
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Disbursed By</th>
+                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Receipt</th>
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
@@ -136,12 +140,29 @@ export function Disbursements({ user }: DisbursementsProps) {
                     <div className="text-xs text-gray-500">{loan.borrowerId}</div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">{loan.loanType}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">${loan.principalAmount.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.principalAmount)}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{loan.interestRate}%</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{loan.termMonths} months</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">${loan.monthlyPayment.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.monthlyPayment)}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{loan.disbursedDate}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{loan.disbursedBy}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => setSelectedLoanForReceipt(loan)}
+                        className="px-3 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors inline-flex items-center gap-2 w-fit shadow-sm"
+                        title={loan.receiptNumber ? `Receipt: ${loan.receiptNumber}` : 'View receipt'}
+                      >
+                        <FileText className="w-4 h-4" />
+                        View
+                      </button>
+                      {loan.receiptNumber ? (
+                        <span className="text-xs text-gray-500">{loan.receiptNumber}</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">No receipt info</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded text-xs capitalize ${
                       loan.status === 'active' ? 'bg-green-100 text-green-700' :
@@ -174,6 +195,10 @@ export function Disbursements({ user }: DisbursementsProps) {
             setSelectedApplication(null);
           }}
         />
+      )}
+
+      {selectedLoanForReceipt && (
+        <DisbursementReceiptModal loan={selectedLoanForReceipt} onClose={() => setSelectedLoanForReceipt(null)} />
       )}
     </div>
   );

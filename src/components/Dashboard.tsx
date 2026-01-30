@@ -2,13 +2,14 @@ import { User } from '../App';
 import { 
   TrendingUp, 
   Users, 
-  DollarSign, 
+  PhilippinePeso, 
   AlertCircle,
   CheckCircle,
   Clock,
   XCircle
 } from 'lucide-react';
 import { useBorrowers, useLoanApplications, useLoans, usePayments } from '../lib/useApiData';
+import { formatPhp } from '../lib/currency';
 
 interface DashboardProps {
   user: User;
@@ -52,14 +53,14 @@ export function Dashboard({ user }: DashboardProps) {
     },
     {
       label: 'Total Outstanding',
-      value: `$${totalOutstanding.toLocaleString()}`,
-      icon: DollarSign,
+      value: formatPhp(totalOutstanding),
+      icon: PhilippinePeso,
       color: 'bg-purple-500',
       change: '-5% from last month'
     },
     {
       label: 'Total Disbursed',
-      value: `$${totalDisbursed.toLocaleString()}`,
+      value: formatPhp(totalDisbursed),
       icon: CheckCircle,
       color: 'bg-orange-500',
       change: '+15% from last month'
@@ -138,7 +139,7 @@ export function Dashboard({ user }: DashboardProps) {
                 <div key={app.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex-1">
                     <div className="text-sm text-gray-900">{app.borrowerName}</div>
-                    <div className="text-xs text-gray-500 capitalize">{app.loanType} - ${app.requestedAmount.toLocaleString()}</div>
+                    <div className="text-xs text-gray-500 capitalize">{app.loanType} - {formatPhp(app.requestedAmount)}</div>
                   </div>
                   <span className={`px-2 py-1 rounded text-xs ${
                     app.status === 'approved' ? 'bg-green-100 text-green-700' :
@@ -166,7 +167,7 @@ export function Dashboard({ user }: DashboardProps) {
                     <div className="text-xs text-gray-500">{payment.paymentDate}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-gray-900">${payment.amount.toLocaleString()}</div>
+                    <div className="text-sm text-gray-900">{formatPhp(payment.amount)}</div>
                     <span className={`text-xs ${
                       payment.status === 'paid' ? 'text-green-600' :
                       payment.status === 'late' ? 'text-red-600' :

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { User } from '../App';
 import { getBorrowerLoans } from '../lib/api';
 import { Loan } from '../lib/types';
+import { formatPhp } from '../lib/currency';
 
 interface BorrowerLoanHistoryProps {
   user: User;
@@ -54,7 +55,7 @@ export function BorrowerLoanHistory({ user }: BorrowerLoanHistoryProps) {
                   <tr key={loan.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2 text-sm text-gray-900">{loan.id}</td>
                     <td className="px-4 py-2 text-sm text-gray-900 capitalize">{loan.loanType}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900">${loan.principalAmount.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900">{formatPhp(loan.principalAmount)}</td>
                     <td className="px-4 py-2 text-sm">
                       <span className={`px-2 py-1 rounded text-xs capitalize ${
                         loan.status === 'active' ? 'bg-green-100 text-green-700' :

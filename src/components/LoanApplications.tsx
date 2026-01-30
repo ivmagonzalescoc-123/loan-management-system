@@ -5,6 +5,7 @@ import { LoanApplication } from '../lib/types';
 import { useLoanApplications } from '../lib/useApiData';
 import { ApplicationDetailsModal } from './ApplicationDetailsModal';
 import { LoanApplicationForm } from './LoanApplicationForm';
+import { formatPhp } from '../lib/currency';
 
 interface LoanApplicationsProps {
   user: User;
@@ -150,7 +151,7 @@ export function LoanApplications({ user }: LoanApplicationsProps) {
                     <span className="text-sm text-gray-900 capitalize">{app.loanType}</span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    ${app.requestedAmount.toLocaleString()}
+                    {formatPhp(app.requestedAmount)}
                   </td>
                   <td className="px-6 py-4">
                     <div className={`text-sm ${

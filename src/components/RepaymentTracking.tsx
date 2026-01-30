@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { User } from '../App';
-import { Search, Plus, DollarSign, Calendar, AlertCircle } from 'lucide-react';
+import { Search, Plus, PhilippinePeso, Calendar, AlertCircle } from 'lucide-react';
 import { createPayment } from '../lib/api';
 import { useLoans, usePayments } from '../lib/useApiData';
+import { formatPhp } from '../lib/currency';
 
 interface RepaymentTrackingProps {
   user: User;
@@ -107,11 +108,11 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-600 mb-1">Total Outstanding</div>
-          <div className="text-2xl text-gray-900">${totalOutstanding.toLocaleString()}</div>
+          <div className="text-2xl text-gray-900">{formatPhp(totalOutstanding)}</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-600 mb-1">Total Collected</div>
-          <div className="text-2xl text-green-600">${totalCollected.toLocaleString()}</div>
+          <div className="text-2xl text-green-600">{formatPhp(totalCollected)}</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-600 mb-1">Overdue Payments</div>
@@ -161,7 +162,7 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
                     <div className="text-sm text-gray-900">{loan.borrowerName}</div>
                     <div className="text-xs text-gray-500">Due: {loan.nextDueDate}</div>
                   </div>
-                  <div className="text-sm text-gray-900">${loan.monthlyPayment.toLocaleString()}</div>
+                  <div className="text-sm text-gray-900">{formatPhp(loan.monthlyPayment)}</div>
                 </div>
               ))}
             </div>
@@ -218,9 +219,9 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
                       <div className="text-sm text-gray-900">{loan.borrowerName}</div>
                       <div className="text-xs text-gray-500">{loan.loanType}</div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">${loan.principalAmount.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">${loan.outstandingBalance.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">${loan.monthlyPayment.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.principalAmount)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.outstandingBalance)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.monthlyPayment)}</td>
                     <td className="px-6 py-4">
                       <div className={`text-sm ${isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
                         {loan.nextDueDate}
@@ -264,7 +265,7 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h3 className="text-gray-900 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-green-600" />
+                <PhilippinePeso className="w-5 h-5 text-green-600" />
                 Recent Payments
               </h3>
               <div className="text-xs text-gray-600">
@@ -350,10 +351,10 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
                   <td className="px-6 py-4 text-sm text-gray-900">{payment.receiptNumber}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{payment.borrowerName}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    ${Number(payment.amount || 0).toLocaleString()}
+                    {formatPhp(payment.amount)}
                     {payment.lateFee && (
                       <span className="text-xs text-red-600 ml-1">
-                        (+${payment.lateFee} late fee)
+                        (+{formatPhp(payment.lateFee)} late fee)
                       </span>
                     )}
                   </td>
@@ -390,7 +391,7 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
               <div>
                 <label className="block text-sm text-gray-700 mb-2">Payment Amount</label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <PhilippinePeso className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input 
                     type="number" 
                     placeholder="0.00"

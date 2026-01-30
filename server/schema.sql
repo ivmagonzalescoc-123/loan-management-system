@@ -55,9 +55,25 @@ CREATE TABLE IF NOT EXISTS loans (
   totalAmount DECIMAL(12,2) NOT NULL,
   disbursedDate VARCHAR(20) NOT NULL,
   disbursedBy VARCHAR(100) NOT NULL,
+  disbursementMethod VARCHAR(50),
+  referenceNumber VARCHAR(50),
+  receiptNumber VARCHAR(50),
+  disbursementMeta LONGTEXT,
   status VARCHAR(20) NOT NULL,
   outstandingBalance DECIMAL(12,2) NOT NULL,
   nextDueDate VARCHAR(20) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS disbursement_receipts (
+  id VARCHAR(20) PRIMARY KEY,
+  loanId VARCHAR(20) NOT NULL,
+  receiptNumber VARCHAR(50) NOT NULL,
+  referenceNumber VARCHAR(50),
+  disbursementMethod VARCHAR(50),
+  meta LONGTEXT,
+  createdAt VARCHAR(30) NOT NULL,
+  UNIQUE KEY uniq_disbursement_receipts_loanId (loanId),
+  UNIQUE KEY uniq_disbursement_receipts_receiptNumber (receiptNumber)
 );
 
 CREATE TABLE IF NOT EXISTS payments (

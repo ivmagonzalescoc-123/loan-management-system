@@ -1,9 +1,10 @@
-import { X, CheckCircle, XCircle, User, DollarSign, Calendar, FileText, Shield, KeyRound } from 'lucide-react';
+import { X, CheckCircle, XCircle, User, PhilippinePeso, Calendar, FileText, Shield, KeyRound } from 'lucide-react';
 import { LoanApplication } from '../lib/types';
 import { User as AppUser } from '../App';
 import { useState } from 'react';
 import { ApprovalForm } from './ApprovalForm';
 import { createAuthorizationCode } from '../lib/api';
+import { formatPhp } from '../lib/currency';
 
 interface ApplicationDetailsModalProps {
   application: LoanApplication;
@@ -134,7 +135,7 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Requested Amount</div>
-                  <div className="text-lg text-gray-900">${application.requestedAmount.toLocaleString()}</div>
+                  <div className="text-lg text-gray-900">{formatPhp(application.requestedAmount)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Application Date</div>
@@ -171,7 +172,7 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
                     </div>
                     <div>
                       <div className="text-xs text-gray-500">Estimated Value</div>
-                      <div className="text-sm text-gray-900">${application.collateralValue?.toLocaleString()}</div>
+                      <div className="text-sm text-gray-900">{formatPhp(application.collateralValue)}</div>
                     </div>
                   </div>
                 </div>
@@ -202,13 +203,13 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
           {application.status === 'approved' && application.approvedAmount && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-6">
               <h4 className="text-sm text-green-900 mb-4 flex items-center gap-2">
-                <DollarSign className="w-4 h-4" />
+                <PhilippinePeso className="w-4 h-4" />
                 Approved Terms
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <div className="text-xs text-green-700">Approved Amount</div>
-                  <div className="text-lg text-green-900">${application.approvedAmount.toLocaleString()}</div>
+                  <div className="text-lg text-green-900">{formatPhp(application.approvedAmount)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-green-700">Interest Rate</div>
@@ -221,11 +222,11 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
                 <div>
                   <div className="text-xs text-green-700">Est. Monthly Payment</div>
                   <div className="text-lg text-green-900">
-                    ${Math.round(calculateMonthlyPayment(
-                      application.approvedAmount, 
-                      application.interestRate!, 
+                    {formatPhp(Math.round(calculateMonthlyPayment(
+                      application.approvedAmount,
+                      application.interestRate!,
                       application.termMonths!
-                    )).toLocaleString()}
+                    )), { maximumFractionDigits: 0 })}
                   </div>
                 </div>
               </div>

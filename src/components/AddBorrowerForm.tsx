@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, User, Briefcase, DollarSign, Home, Shield } from 'lucide-react';
+import { X, User, Briefcase, PhilippinePeso, Home, Shield } from 'lucide-react';
 import { createBorrower } from '../lib/api';
 
 interface AddBorrowerFormProps {
@@ -647,7 +647,7 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
           {step === 4 && (
             <div className="space-y-6">
               <div className="flex items-center gap-2 mb-4">
-                <DollarSign className="w-5 h-5 text-blue-600" />
+                <PhilippinePeso className="w-5 h-5 text-blue-600" />
                 <h4 className="text-gray-900">Financial Information</h4>
               </div>
 
@@ -659,7 +659,7 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Monthly Income ($) *</label>
+                  <label className="block text-sm text-gray-700 mb-2">Monthly Income (₱) *</label>
                   <input
                     type="number"
                     name="monthlyIncome"
@@ -671,7 +671,7 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Monthly Expenses ($) *</label>
+                  <label className="block text-sm text-gray-700 mb-2">Monthly Expenses (₱) *</label>
                   <input
                     type="number"
                     name="monthlyExpenses"
@@ -697,7 +697,7 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Other Income Amount ($)</label>
+                  <label className="block text-sm text-gray-700 mb-2">Other Income Amount (₱)</label>
                   <input
                     type="number"
                     name="otherIncomeAmount"
@@ -710,7 +710,7 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-700 mb-2">Total Existing Debts ($)</label>
+                <label className="block text-sm text-gray-700 mb-2">Total Existing Debts (₱)</label>
                 <input
                   type="number"
                   name="existingDebts"

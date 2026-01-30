@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { X, User, DollarSign, FileText, Shield, UserCheck } from 'lucide-react';
+import { X, User, PhilippinePeso, FileText, Shield, UserCheck } from 'lucide-react';
 import { createLoanApplication } from '../lib/api';
 import { useBorrowers } from '../lib/useApiData';
+import { formatPhp } from '../lib/currency';
 
 interface LoanApplicationFormProps {
   onClose: () => void;
@@ -11,12 +12,20 @@ interface LoanApplicationFormProps {
 export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormProps) {
   const { data: borrowers } = useBorrowers();
   const [step, setStep] = useState(1);
+
+  const getSuggestedInterestRate = (termMonths: number) => {
+    const safeTerm = Number.isFinite(termMonths) ? Math.max(1, termMonths) : 36;
+    const steps = Math.ceil(Math.max(0, safeTerm - 12) / 12);
+    return Math.min(20, 10 + steps * 2);
+  };
+
   const [formData, setFormData] = useState({
     borrowerId: '',
     loanType: 'personal',
     requestedAmount: '',
     purpose: '',
     termMonths: '36',
+    interestRate: String(getSuggestedInterestRate(36)),
     hasCollateral: false,
     collateralType: '',
     collateralValue: '',
@@ -31,10 +40,22 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
-    }));
+    const nextValue = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
+
+    setFormData(prev => {
+      const next = { ...prev, [name]: nextValue } as typeof prev;
+
+      if (name === 'termMonths') {
+        const term = parseInt(String(value), 10);
+        const suggested = getSuggestedInterestRate(Number.isFinite(term) ? term : 36);
+        const currentRate = parseFloat(next.interestRate);
+        if (!Number.isFinite(currentRate) || currentRate < suggested) {
+          next.interestRate = String(suggested);
+        }
+      }
+
+      return next;
+    });
   };
 
   const handleSubmit = async () => {
@@ -55,13 +76,19 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
         ? parseFloat(formData.collateralValue)
         : undefined;
 
+      const termMonths = parseInt(formData.termMonths, 10);
+      const suggestedRate = getSuggestedInterestRate(Number.isFinite(termMonths) ? termMonths : 36);
+      const selectedRate = parseFloat(formData.interestRate);
+      const interestRate = Number.isFinite(selectedRate) ? Math.min(20, Math.max(suggestedRate, selectedRate)) : suggestedRate;
+
       await createLoanApplication({
         borrowerId: borrower.id,
         borrowerName: `${borrower.firstName} ${borrower.lastName}`,
         loanType: formData.loanType as 'personal' | 'business' | 'mortgage' | 'education' | 'vehicle',
         requestedAmount,
         purpose: formData.purpose,
-        termMonths: parseInt(formData.termMonths, 10),
+        termMonths,
+        interestRate,
         creditScore: borrower.creditScore,
         collateralType: formData.hasCollateral ? formData.collateralType : undefined,
         collateralValue: collateralValue && !Number.isNaN(collateralValue) ? collateralValue : undefined,
@@ -75,6 +102,12 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
   };
 
   const totalSteps = 3;
+  const selectedTermMonths = parseInt(formData.termMonths, 10);
+  const suggestedRate = getSuggestedInterestRate(Number.isFinite(selectedTermMonths) ? selectedTermMonths : 36);
+  const interestRateOptions = Array.from({ length: Math.floor((20 - suggestedRate) * 2) + 1 }, (_, idx) => {
+    const value = suggestedRate + idx * 0.5;
+    return Math.round(value * 10) / 10;
+  });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -157,7 +190,7 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Requested Amount ($) *</label>
+                  <label className="block text-sm text-gray-700 mb-2">Requested Amount (₱) *</label>
                   <input
                     type="number"
                     name="requestedAmount"
@@ -189,6 +222,24 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
                   <option value="240">240 months (20 years)</option>
                   <option value="360">360 months (30 years)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-700 mb-2">Interest Rate (% per annum) *</label>
+                <select
+                  name="interestRate"
+                  value={formData.interestRate}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  {interestRateOptions.map((rate) => (
+                    <option key={rate} value={String(rate)}>
+                      {rate}% {rate === suggestedRate ? '(suggested)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Longer terms have higher rates (max 20%).</p>
               </div>
 
               <div>
@@ -253,7 +304,7 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
                     </div>
 
                     <div>
-                      <label className="block text-sm text-gray-700 mb-2">Estimated Value ($) *</label>
+                      <label className="block text-sm text-gray-700 mb-2">Estimated Value (₱) *</label>
                       <input
                         type="number"
                         name="collateralValue"
@@ -397,11 +448,15 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Requested Amount:</span>
-                    <span className="text-gray-900">${formData.requestedAmount || '0'}</span>
+                    <span className="text-gray-900">{formatPhp(formData.requestedAmount)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Term:</span>
                     <span className="text-gray-900">{formData.termMonths} months</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Interest Rate:</span>
+                    <span className="text-gray-900">{formData.interestRate}%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Collateral:</span>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, CheckCircle, XCircle, Calculator, FileText } from 'lucide-react';
 import { LoanApplication } from '../lib/types';
 import { updateLoanApplication } from '../lib/api';
+import { formatPhp } from '../lib/currency';
 
 interface ApprovalFormProps {
   application: LoanApplication;
@@ -14,8 +15,8 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
   const [action, setAction] = useState<'approve' | 'reject'>('approve');
   const [formData, setFormData] = useState({
     approvedAmount: application.requestedAmount.toString(),
-    interestRate: '7.5',
-    termMonths: '36',
+    interestRate: String(application.interestRate ?? 7.5),
+    termMonths: String(application.termMonths ?? 36),
     processingFee: '500',
     insuranceFee: '200',
     disbursementMethod: 'bank_transfer',
@@ -148,7 +149,7 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
               </div>
               <div>
                 <div className="text-blue-700">Requested Amount</div>
-                <div className="text-blue-900">${application.requestedAmount.toLocaleString()}</div>
+                <div className="text-blue-900">{formatPhp(application.requestedAmount)}</div>
               </div>
               <div>
                 <div className="text-blue-700">Credit Score</div>
@@ -174,7 +175,7 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-gray-700 mb-2">Approved Amount ($) *</label>
+                    <label className="block text-sm text-gray-700 mb-2">Approved Amount (₱) *</label>
                     <input
                       type="number"
                       name="approvedAmount"
@@ -239,7 +240,7 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                   <div>
-                    <label className="block text-sm text-gray-700 mb-2">Processing Fee ($)</label>
+                    <label className="block text-sm text-gray-700 mb-2">Processing Fee (₱)</label>
                     <input
                       type="number"
                       name="processingFee"
@@ -250,7 +251,7 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-700 mb-2">Insurance Fee ($)</label>
+                    <label className="block text-sm text-gray-700 mb-2">Insurance Fee (₱)</label>
                     <input
                       type="number"
                       name="insuranceFee"
@@ -271,20 +272,20 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <div className="text-green-700">Principal Amount</div>
-                    <div className="text-lg text-green-900">${parseFloat(formData.approvedAmount || '0').toLocaleString()}</div>
+                    <div className="text-lg text-green-900">{formatPhp(parseFloat(formData.approvedAmount || '0'))}</div>
                   </div>
                   <div>
                     <div className="text-green-700">Monthly Payment</div>
-                    <div className="text-lg text-green-900">${Math.round(calculateMonthlyPayment()).toLocaleString()}</div>
+                    <div className="text-lg text-green-900">{formatPhp(Math.round(calculateMonthlyPayment()), { maximumFractionDigits: 0 })}</div>
                   </div>
                   <div>
                     <div className="text-green-700">Total Amount</div>
-                    <div className="text-lg text-green-900">${Math.round(calculateTotalAmount()).toLocaleString()}</div>
+                    <div className="text-lg text-green-900">{formatPhp(Math.round(calculateTotalAmount()), { maximumFractionDigits: 0 })}</div>
                   </div>
                   <div>
                     <div className="text-green-700">Total Interest</div>
                     <div className="text-lg text-green-900">
-                      ${Math.round(calculateTotalAmount() - parseFloat(formData.approvedAmount || '0')).toLocaleString()}
+                      {formatPhp(Math.round(calculateTotalAmount() - parseFloat(formData.approvedAmount || '0')), { maximumFractionDigits: 0 })}
                     </div>
                   </div>
                 </div>

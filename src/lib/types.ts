@@ -53,6 +53,10 @@ export interface Loan {
   totalAmount: number;
   disbursedDate: string;
   disbursedBy: string;
+  disbursementMethod?: string | null;
+  referenceNumber?: string | null;
+  receiptNumber?: string | null;
+  disbursementMeta?: string | null;
   status: 'active' | 'completed' | 'defaulted' | 'written_off';
   outstandingBalance: number;
   nextDueDate: string;

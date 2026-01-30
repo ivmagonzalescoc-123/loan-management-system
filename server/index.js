@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -5,7 +7,9 @@ const { pool, init } = require('./db');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+const bodyLimit = process.env.JSON_BODY_LIMIT || '10mb';
+app.use(express.json({ limit: bodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
 
 init().catch((error) => {
   console.error('Failed to initialize database schema:', error);
@@ -362,7 +366,19 @@ app.get('/api/borrowers/:id/credit-score', async (req, res) => {
 app.get('/api/borrowers/:id/loans', async (req, res) => {
   try {
     const { id } = req.params;
-    const rows = await runQuery('SELECT * FROM loans WHERE borrowerId = ? ORDER BY disbursedDate DESC', [id]);
+    const rows = await runQuery(
+      `SELECT
+         l.*,
+         COALESCE(r.disbursementMethod, l.disbursementMethod) AS disbursementMethod,
+         COALESCE(r.referenceNumber, l.referenceNumber) AS referenceNumber,
+         COALESCE(r.receiptNumber, l.receiptNumber) AS receiptNumber,
+         COALESCE(r.meta, l.disbursementMeta) AS disbursementMeta
+       FROM loans l
+       LEFT JOIN disbursement_receipts r ON r.loanId = l.id
+       WHERE l.borrowerId = ?
+       ORDER BY l.disbursedDate DESC`,
+      [id]
+    );
     res.json(rows);
   } catch (error) {
     res.status(500).send(error.message);
@@ -401,7 +417,7 @@ app.post('/api/borrowers', async (req, res) => {
         id, firstName, lastName, email, phone, dateOfBirth, address, employment,
         monthlyIncome, bankName, accountNumber, accountType, routingNumber, facialImage, idImage,
         password, passwordUpdatedAt, creditScore, status, registrationDate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         id,
         payload.firstName,
@@ -594,7 +610,17 @@ app.patch('/api/loan-applications/:id', async (req, res) => {
 
 app.get('/api/loans', async (req, res) => {
   try {
-    const rows = await runQuery('SELECT * FROM loans ORDER BY disbursedDate DESC');
+    const rows = await runQuery(
+      `SELECT
+         l.*,
+         COALESCE(r.disbursementMethod, l.disbursementMethod) AS disbursementMethod,
+         COALESCE(r.referenceNumber, l.referenceNumber) AS referenceNumber,
+         COALESCE(r.receiptNumber, l.receiptNumber) AS receiptNumber,
+         COALESCE(r.meta, l.disbursementMeta) AS disbursementMeta
+       FROM loans l
+       LEFT JOIN disbursement_receipts r ON r.loanId = l.id
+       ORDER BY l.disbursedDate DESC`
+    );
     res.json(rows);
   } catch (error) {
     res.status(500).send(error.message);
@@ -607,35 +633,81 @@ app.post('/api/loans', async (req, res) => {
     const id = payload.id || generateId('LN');
     const status = payload.status || 'active';
 
-    await runExecute(
-      `INSERT INTO loans (
-        id, applicationId, borrowerId, borrowerName, loanType, principalAmount,
-        interestRate, termMonths, monthlyPayment, totalAmount, disbursedDate,
-        disbursedBy, status, outstandingBalance, nextDueDate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
-      [
-        id,
-        payload.applicationId,
-        payload.borrowerId,
-        payload.borrowerName,
-        payload.loanType,
-        payload.principalAmount,
-        payload.interestRate,
-        payload.termMonths,
-        payload.monthlyPayment,
-        payload.totalAmount,
-        payload.disbursedDate,
-        payload.disbursedBy,
-        status,
-        payload.outstandingBalance,
-        payload.nextDueDate
-      ]
-    );
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
 
-    await runExecute(
-      'UPDATE loan_applications SET status = ? WHERE id = ?',
-      ['disbursed', payload.applicationId]
-    );
+      await connection.execute(
+        `INSERT INTO loans (
+          id, applicationId, borrowerId, borrowerName, loanType, principalAmount,
+          interestRate, termMonths, monthlyPayment, totalAmount, disbursedDate,
+          disbursedBy, disbursementMethod, referenceNumber, receiptNumber, disbursementMeta,
+          status, outstandingBalance, nextDueDate
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        [
+          id,
+          payload.applicationId,
+          payload.borrowerId,
+          payload.borrowerName,
+          payload.loanType,
+          payload.principalAmount,
+          payload.interestRate,
+          payload.termMonths,
+          payload.monthlyPayment,
+          payload.totalAmount,
+          payload.disbursedDate,
+          payload.disbursedBy,
+          payload.disbursementMethod || null,
+          payload.referenceNumber || null,
+          payload.receiptNumber || null,
+          payload.disbursementMeta || null,
+          status,
+          payload.outstandingBalance,
+          payload.nextDueDate
+        ]
+      );
+
+      // Store receipt in its own table (source of truth).
+      const receiptId = generateId('DRC');
+      const receiptNumber = payload.receiptNumber || `DR-${Date.now().toString().slice(-6)}`;
+      const referenceNumber = payload.referenceNumber || null;
+
+      await connection.execute(
+        `INSERT INTO disbursement_receipts (
+          id, loanId, receiptNumber, referenceNumber, disbursementMethod, meta, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          receiptNumber = VALUES(receiptNumber),
+          referenceNumber = VALUES(referenceNumber),
+          disbursementMethod = VALUES(disbursementMethod),
+          meta = VALUES(meta)` ,
+        [
+          receiptId,
+          id,
+          receiptNumber,
+          referenceNumber,
+          payload.disbursementMethod || null,
+          payload.disbursementMeta || null,
+          new Date().toISOString()
+        ]
+      );
+
+      await connection.execute(
+        'UPDATE loan_applications SET status = ? WHERE id = ?',
+        ['disbursed', payload.applicationId]
+      );
+
+      await connection.commit();
+    } catch (err) {
+      try {
+        await connection.rollback();
+      } catch {
+        // ignore
+      }
+      throw err;
+    } finally {
+      connection.release();
+    }
 
     await logAudit({
       action: 'DISBURSED',

@@ -3,6 +3,7 @@ import { User } from '../App';
 import { Search, Plus, Eye, Edit, TrendingUp, TrendingDown, KeyRound } from 'lucide-react';
 import { Borrower } from '../lib/types';
 import { useBorrowers, useLoans } from '../lib/useApiData';
+import { formatPhp } from '../lib/currency';
 import { BorrowerDetailsModal } from './BorrowerDetailsModal';
 import { AddBorrowerForm } from './AddBorrowerForm';
 import { resetBorrowerPassword, updateBorrower } from '../lib/api';
@@ -180,7 +181,7 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
                     <div className="text-xs text-gray-500">{borrower.phone}</div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">{borrower.employment}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">${borrower.monthlyIncome.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(borrower.monthlyIncome)}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <span className={`text-lg ${getCreditScoreColor(borrower.creditScore)}`}>

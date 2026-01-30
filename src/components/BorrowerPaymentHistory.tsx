@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { User } from '../App';
 import { getBorrowerPayments } from '../lib/api';
 import { Payment } from '../lib/types';
+import { formatPhp } from '../lib/currency';
 
 interface BorrowerPaymentHistoryProps {
   user: User;
@@ -159,7 +160,7 @@ export function BorrowerPaymentHistory({ user }: BorrowerPaymentHistoryProps) {
                 {filteredPayments.map(payment => (
                   <tr key={payment.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2 text-sm text-gray-900">{payment.receiptNumber}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900">${Number(payment.amount || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900">{formatPhp(payment.amount)}</td>
                     <td className="px-4 py-2 text-sm text-gray-900">{payment.paymentDate}</td>
                     <td className="px-4 py-2 text-sm">
                       <span className={`px-2 py-1 rounded text-xs capitalize ${

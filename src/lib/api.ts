@@ -79,6 +79,7 @@ export interface CreateLoanApplicationPayload {
   guarantorName?: string;
   guarantorPhone?: string;
   termMonths?: number;
+  interestRate?: number;
   creditScore: number;
 }
 
@@ -103,6 +104,10 @@ export interface CreateLoanPayload {
   totalAmount: number;
   disbursedDate: string;
   disbursedBy: string;
+  disbursementMethod?: string;
+  referenceNumber?: string;
+  receiptNumber?: string;
+  disbursementMeta?: string;
   status?: 'active' | 'completed' | 'defaulted' | 'written_off';
   outstandingBalance: number;
   nextDueDate: string;

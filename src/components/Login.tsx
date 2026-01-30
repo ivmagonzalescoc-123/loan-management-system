@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { User } from '../App';
 import { Shield } from 'lucide-react';
 import { loginUser } from '../lib/api';
+import logoUrl from '../../logo.png';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -29,12 +30,11 @@ export function Login({ onLogin }: LoginProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mx-auto mb-6">
-          <Shield className="w-8 h-8 text-blue-600" />
+        <div className="flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mx-auto mb-6 overflow-hidden">
+          <img src={logoUrl} alt="Loan Management System logo" className="w-10 h-10 object-contain" />
         </div>
         
         <h2 className="text-center text-gray-900 mb-2">Loan Management System</h2>
-        <p className="text-center text-sm text-gray-500 mb-8">Sign in to continue</p>
 
         <div className="space-y-4 mb-6">
           <div>

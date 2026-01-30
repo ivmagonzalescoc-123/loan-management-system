@@ -11,6 +11,22 @@ const pool = mysql.createPool({
 });
 
 async function init() {
+  // Base64 images can easily exceed default MariaDB/XAMPP packet limits (often 1MB).
+  // Try to raise the limit automatically for local/dev; if the DB user lacks permission,
+  // the app will continue to run and the admin can set it in my.ini.
+  const desiredPacketBytes = Number(process.env.DB_MAX_ALLOWED_PACKET || 64 * 1024 * 1024);
+  if (Number.isFinite(desiredPacketBytes) && desiredPacketBytes > 0) {
+    try {
+      await pool.query(`SET GLOBAL max_allowed_packet = ${Math.floor(desiredPacketBytes)}`);
+      await pool.query(`SET SESSION max_allowed_packet = ${Math.floor(desiredPacketBytes)}`);
+    } catch (error) {
+      console.warn(
+        'Warning: Could not set max_allowed_packet automatically. ' +
+          'If borrower image uploads fail, increase max_allowed_packet in MariaDB/MySQL config (my.ini).'
+      );
+    }
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS borrowers (
       id VARCHAR(20) PRIMARY KEY,
@@ -73,9 +89,27 @@ async function init() {
       totalAmount DECIMAL(12,2) NOT NULL,
       disbursedDate VARCHAR(20) NOT NULL,
       disbursedBy VARCHAR(100) NOT NULL,
+      disbursementMethod VARCHAR(50),
+      referenceNumber VARCHAR(50),
+      receiptNumber VARCHAR(50),
+      disbursementMeta LONGTEXT,
       status VARCHAR(20) NOT NULL,
       outstandingBalance DECIMAL(12,2) NOT NULL,
       nextDueDate VARCHAR(20) NOT NULL
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS disbursement_receipts (
+      id VARCHAR(20) PRIMARY KEY,
+      loanId VARCHAR(20) NOT NULL,
+      receiptNumber VARCHAR(50) NOT NULL,
+      referenceNumber VARCHAR(50),
+      disbursementMethod VARCHAR(50),
+      meta LONGTEXT,
+      createdAt VARCHAR(30) NOT NULL,
+      UNIQUE KEY uniq_disbursement_receipts_loanId (loanId),
+      UNIQUE KEY uniq_disbursement_receipts_receiptNumber (receiptNumber)
     )
   `);
 
@@ -181,6 +215,66 @@ async function init() {
   await addColumnIfMissing('borrowers', 'passwordUpdatedAt VARCHAR(30)');
   await addColumnIfMissing('users', 'status TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('users', 'archivedAt VARCHAR(30)');
+
+  await addColumnIfMissing('loans', 'disbursementMethod VARCHAR(50)');
+  await addColumnIfMissing('loans', 'referenceNumber VARCHAR(50)');
+  await addColumnIfMissing('loans', 'receiptNumber VARCHAR(50)');
+  await addColumnIfMissing('loans', 'disbursementMeta LONGTEXT');
+
+  // Ensure receipt table columns exist if schema evolves.
+  await addColumnIfMissing('disbursement_receipts', 'referenceNumber VARCHAR(50)');
+  await addColumnIfMissing('disbursement_receipts', 'disbursementMethod VARCHAR(50)');
+  await addColumnIfMissing('disbursement_receipts', 'meta LONGTEXT');
+  await addColumnIfMissing('disbursement_receipts', 'createdAt VARCHAR(30) NOT NULL');
+
+  // Backfill receipt fields for older loans created before receipts were added.
+  // This keeps the UI consistent and makes receipts printable for legacy data.
+  try {
+    await pool.query(
+      `UPDATE loans
+       SET
+         disbursementMethod = CASE
+           WHEN disbursementMethod IS NULL OR disbursementMethod = '' THEN 'cash'
+           ELSE disbursementMethod
+         END,
+         referenceNumber = CASE
+           WHEN referenceNumber IS NULL OR referenceNumber = '' THEN CONCAT('REF-', id)
+           ELSE referenceNumber
+         END,
+         receiptNumber = CASE
+           WHEN receiptNumber IS NULL OR receiptNumber = '' THEN CONCAT('DR-', id)
+           ELSE receiptNumber
+         END
+       WHERE
+         (disbursementMethod IS NULL OR disbursementMethod = ''
+          OR referenceNumber IS NULL OR referenceNumber = ''
+          OR receiptNumber IS NULL OR receiptNumber = '')
+      `
+    );
+  } catch (error) {
+    console.warn('Warning: Could not backfill loan receipt fields automatically.', error?.message || error);
+  }
+
+  // Backfill receipt rows for older loans (one receipt per loan).
+  try {
+    await pool.query(
+      `INSERT IGNORE INTO disbursement_receipts (
+        id, loanId, receiptNumber, referenceNumber, disbursementMethod, meta, createdAt
+      )
+      SELECT
+        CONCAT('DRC', RIGHT(l.id, 6)) as id,
+        l.id as loanId,
+        COALESCE(NULLIF(l.receiptNumber, ''), CONCAT('DR-', l.id)) as receiptNumber,
+        COALESCE(NULLIF(l.referenceNumber, ''), CONCAT('REF-', l.id)) as referenceNumber,
+        COALESCE(NULLIF(l.disbursementMethod, ''), 'cash') as disbursementMethod,
+        l.disbursementMeta as meta,
+        COALESCE(NULLIF(l.disbursedDate, ''), DATE_FORMAT(NOW(), '%Y-%m-%d')) as createdAt
+      FROM loans l
+      `
+    );
+  } catch (error) {
+    console.warn('Warning: Could not backfill disbursement receipts automatically.', error?.message || error);
+  }
 
   const roles = ['admin', 'loan_officer', 'cashier', 'borrower', 'auditor'];
   for (const role of roles) {

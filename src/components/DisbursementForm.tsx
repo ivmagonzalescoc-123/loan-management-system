@@ -3,6 +3,9 @@ import { X, Upload, FileText, CheckCircle, AlertCircle, Banknote } from 'lucide-
 import { LoanApplication } from '../lib/types';
 import { consumeAuthorizationCode, createLoan } from '../lib/api';
 import { useBorrowers } from '../lib/useApiData';
+import { formatPhp } from '../lib/currency';
+import type { Loan } from '../lib/types';
+import { DisbursementReceiptModal } from './DisbursementReceiptModal';
 
 interface DisbursementFormProps {
   application: LoanApplication;
@@ -42,6 +45,7 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
 
   const [step, setStep] = useState(1);
   const [accountSource, setAccountSource] = useState<'borrower' | 'other'>(hasSavedBank ? 'borrower' : 'other');
+  const [createdLoanForReceipt, setCreatedLoanForReceipt] = useState<Loan | null>(null);
 
   useEffect(() => {
     if (!hasSavedBank) return;
@@ -122,7 +126,24 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
         code: formData.verificationCode.trim()
       });
 
-      await createLoan({
+      const receiptNumber = `DR-${Date.now().toString().slice(-6)}`;
+      const referenceNumber = formData.referenceNumber || `REF-${Date.now().toString().slice(-8)}`;
+      const disbursementMethod = formData.disbursementMethod;
+      const disbursementMeta = {
+        disbursementTime: formData.disbursementTime,
+        disbursementMethod,
+        bankName: formData.bankName,
+        accountHolderName: formData.accountHolderName,
+        accountNumberLast4: formData.accountNumber ? String(formData.accountNumber).slice(-4) : undefined,
+        checkNumber: formData.checkNumber,
+        checkDate: formData.checkDate,
+        digitalWalletProvider: formData.digitalWalletProvider,
+        walletId: formData.walletId,
+        processingOfficer: formData.processingOfficer,
+        notes: formData.notes
+      };
+
+      const { id: loanId } = await createLoan({
         applicationId: application.id,
         borrowerId: application.borrowerId,
         borrowerName: application.borrowerName,
@@ -134,12 +155,37 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
         totalAmount,
         disbursedDate: formData.disbursementDate,
         disbursedBy: formData.processingOfficer,
+        disbursementMethod,
+        referenceNumber,
+        receiptNumber,
+        disbursementMeta: JSON.stringify(disbursementMeta),
         status: 'active',
         outstandingBalance: totalAmount,
         nextDueDate: addMonths(formData.disbursementDate, 1)
       });
 
-      onDisburse();
+      // Show receipt preview first (no auto-print). User can print from the modal.
+      setCreatedLoanForReceipt({
+        id: loanId,
+        applicationId: application.id,
+        borrowerId: application.borrowerId,
+        borrowerName: application.borrowerName,
+        loanType: application.loanType,
+        principalAmount: approvedAmount,
+        interestRate,
+        termMonths,
+        monthlyPayment,
+        totalAmount,
+        disbursedDate: formData.disbursementDate,
+        disbursedBy: formData.processingOfficer,
+        disbursementMethod,
+        referenceNumber,
+        receiptNumber,
+        disbursementMeta: JSON.stringify(disbursementMeta),
+        status: 'active',
+        outstandingBalance: totalAmount,
+        nextDueDate: addMonths(formData.disbursementDate, 1)
+      });
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to disburse loan');
     }
@@ -150,6 +196,15 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        {createdLoanForReceipt && (
+          <DisbursementReceiptModal
+            loan={createdLoanForReceipt}
+            onClose={() => {
+              setCreatedLoanForReceipt(null);
+              onDisburse();
+            }}
+          />
+        )}
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between z-10">
           <div>
@@ -196,7 +251,7 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
               </div>
               <div>
                 <div className="text-blue-700">Approved Amount</div>
-                <div className="text-lg text-blue-900">${approvedAmount.toLocaleString()}</div>
+                <div className="text-lg text-blue-900">{formatPhp(approvedAmount)}</div>
               </div>
               <div>
                 <div className="text-blue-700">Interest Rate</div>
@@ -613,7 +668,7 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Amount:</span>
-                    <span className="text-lg text-gray-900">${approvedAmount.toLocaleString()}</span>
+                    <span className="text-lg text-gray-900">{formatPhp(approvedAmount)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Method:</span>
@@ -641,7 +696,7 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
               {/* Verification Inputs */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Confirm Amount ($) *</label>
+                  <label className="block text-sm text-gray-700 mb-2">Confirm Amount (₱) *</label>
                   <input
                     type="number"
                     name="confirmAmount"
