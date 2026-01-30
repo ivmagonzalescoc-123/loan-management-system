@@ -62,10 +62,19 @@
 
   ### Default admin login
 
-  On first startup, a default admin user is created:
+  On first startup (when there are no users yet), a default admin user is created:
 
   - Email: `admin@lms.com`
-  - Password: `admin123`
+  - Password: `Admin@1234`
+
+  Passwords are stored hashed (bcrypt). New passwords must be at least 8 characters and include at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 special character.
+
+  You can override the default admin credentials via:
+
+  - `ADMIN_EMAIL`
+  - `ADMIN_PASSWORD`
+
+  If your database already has a user, the server will ensure at least one account has the `admin` role so it can manage everything.
 
   ### Frontend API URL
 

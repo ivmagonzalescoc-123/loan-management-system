@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
 const { pool, init } = require('./db');
 
 const app = express();
@@ -15,14 +16,77 @@ const PORT = process.env.API_PORT || 5174;
 
 const generateId = (prefix) => `${prefix}${Date.now().toString().slice(-6)}`;
 
-const generateTempPassword = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
-  let result = '';
-  for (let i = 0; i < 10; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+const PASSWORD_POLICY = {
+  minLength: 8,
+  requireUpper: true,
+  requireLower: true,
+  requireNumber: true,
+  requireSpecial: true
 };
+
+const validatePasswordPolicy = (password) => {
+  if (typeof password !== 'string') return 'Password is required.';
+  if (password.length < PASSWORD_POLICY.minLength) {
+    return `Password must be at least ${PASSWORD_POLICY.minLength} characters.`;
+  }
+  if (PASSWORD_POLICY.requireUpper && !/[A-Z]/.test(password)) {
+    return 'Password must include at least 1 uppercase letter.';
+  }
+  if (PASSWORD_POLICY.requireLower && !/[a-z]/.test(password)) {
+    return 'Password must include at least 1 lowercase letter.';
+  }
+  if (PASSWORD_POLICY.requireNumber && !/\d/.test(password)) {
+    return 'Password must include at least 1 number.';
+  }
+  if (PASSWORD_POLICY.requireSpecial && !/[^A-Za-z0-9]/.test(password)) {
+    return 'Password must include at least 1 special character.';
+  }
+  return null;
+};
+
+const isBcryptHash = (value) => {
+  if (typeof value !== 'string') return false;
+  return /^\$2[aby]\$\d{2}\$/.test(value);
+};
+
+const hashPassword = async (password) => {
+  const rounds = Number(process.env.BCRYPT_ROUNDS || 10);
+  const safeRounds = Number.isFinite(rounds) ? Math.max(8, Math.min(14, rounds)) : 10;
+  return bcrypt.hash(password, safeRounds);
+};
+
+const verifyPassword = async (password, stored) => {
+  if (!stored) return false;
+  if (isBcryptHash(stored)) {
+    return bcrypt.compare(password, stored);
+  }
+  return stored === password;
+};
+
+const generateStrongPassword = (length = 12) => {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const numbers = '23456789';
+  const special = '!@#$%&*?_';
+
+  const pick = (chars) => chars.charAt(Math.floor(Math.random() * chars.length));
+
+  const targetLen = Math.max(PASSWORD_POLICY.minLength, length);
+  const chars = [pick(upper), pick(lower), pick(numbers), pick(special)];
+  const all = upper + lower + numbers + special;
+
+  while (chars.length < targetLen) chars.push(pick(all));
+
+  // Fisher–Yates shuffle
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+
+  return chars.join('');
+};
+
+const generateTempPassword = () => generateStrongPassword(12);
 
 const generateAuthCode = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -43,26 +107,49 @@ const computeBorrowerScore = async (borrowerId) => {
   const borrower = borrowerRows[0];
   if (!borrower) return null;
 
-  const loanRows = await runQuery('SELECT principalAmount, outstandingBalance FROM loans WHERE borrowerId = ?', [borrowerId]);
+  const loanRows = await runQuery(
+    'SELECT principalAmount, outstandingBalance, status, disbursedDate FROM loans WHERE borrowerId = ?',
+    [borrowerId]
+  );
   const paymentRows = await runQuery(
-    `SELECT p.status
+    `SELECT p.amount, p.paymentDate, p.dueDate, p.status
      FROM payments p
      INNER JOIN loans l ON p.loanId = l.id
      WHERE l.borrowerId = ?`,
+    [borrowerId]
+  );
+  const applicationRows = await runQuery(
+    'SELECT applicationDate FROM loan_applications WHERE borrowerId = ?',
     [borrowerId]
   );
 
   const totalPrincipal = loanRows.reduce((sum, l) => sum + Number(l.principalAmount || 0), 0);
   const totalOutstanding = loanRows.reduce((sum, l) => sum + Number(l.outstandingBalance || 0), 0);
 
-  const paidCount = paymentRows.filter(p => p.status === 'paid').length;
-  const lateCount = paymentRows.filter(p => p.status === 'late').length;
-  const totalPayments = paidCount + lateCount;
-  const onTimeRatio = totalPayments === 0 ? 0.7 : paidCount / totalPayments;
-  const paymentHistoryScore = clamp(onTimeRatio * 100, 0, 100);
+  const parsedPayments = paymentRows.map(p => {
+    const paymentDate = p.paymentDate ? new Date(p.paymentDate) : null;
+    const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+    const daysLate = paymentDate && dueDate
+      ? Math.floor((paymentDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+      : 0;
+    return { ...p, daysLate };
+  });
 
-  const utilization = totalPrincipal === 0 ? 0.3 : totalOutstanding / totalPrincipal;
-  const utilizationScore = clamp((1 - utilization) * 100, 0, 100);
+  const totalPayments = parsedPayments.length;
+  const onTimePayments = parsedPayments.filter(p => p.daysLate <= 0 || p.status === 'paid').length;
+  const latePayments = parsedPayments.filter(p => p.daysLate > 0 || p.status === 'late').length;
+  const avgLateDays = latePayments === 0
+    ? 0
+    : parsedPayments.filter(p => p.daysLate > 0).reduce((sum, p) => sum + p.daysLate, 0) / latePayments;
+
+  const onTimeRatio = totalPayments === 0 ? 0.6 : onTimePayments / totalPayments;
+  const lateSeverityPenalty = clamp(avgLateDays * 0.5, 0, 30);
+  const defaultedCount = loanRows.filter(l => ['defaulted', 'written_off'].includes(l.status)).length;
+  const defaultPenalty = clamp(defaultedCount * 20, 0, 40);
+  const paymentHistoryScore = clamp(onTimeRatio * 100 - lateSeverityPenalty - defaultPenalty, 0, 100);
+
+  const utilization = totalPrincipal === 0 ? 0 : totalOutstanding / totalPrincipal;
+  const utilizationScore = clamp(100 - utilization * 100, 0, 100);
 
   const regDate = borrower.registrationDate ? new Date(borrower.registrationDate) : new Date();
   const monthsActive = Math.max(0, (Date.now() - regDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
@@ -70,16 +157,22 @@ const computeBorrowerScore = async (borrowerId) => {
 
   const annualIncome = Number(borrower.monthlyIncome || 0) * 12;
   const debtToIncome = annualIncome === 0 ? 1 : totalOutstanding / annualIncome;
-  const totalDebtScore = clamp(100 - debtToIncome * 50, 0, 100);
+  const totalDebtScore = clamp(100 - debtToIncome * 80, 0, 100);
 
-  const inquiriesScore = 80;
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const recentInquiries = applicationRows.filter(a => {
+    const date = a.applicationDate ? new Date(a.applicationDate) : null;
+    return date && date >= sixMonthsAgo;
+  }).length;
+  const inquiriesScore = clamp(100 - recentInquiries * 10, 0, 100);
 
   const weighted =
     paymentHistoryScore * 0.35 +
     utilizationScore * 0.30 +
     creditAgeScore * 0.15 +
-    totalDebtScore * 0.10 +
-    inquiriesScore * 0.10;
+    totalDebtScore * 0.15 +
+    inquiriesScore * 0.05;
 
   const score = clamp(Math.round(300 + weighted * 5.5), 300, 850);
 
@@ -156,7 +249,11 @@ app.post('/api/login', async (req, res) => {
     const userAgent = req.headers['user-agent'] || '';
     const createdAt = new Date().toISOString();
 
-    if (user && user.password === password) {
+    if (user && await verifyPassword(password, user.password)) {
+      if (!isBcryptHash(user.password)) {
+        const hashed = await hashPassword(password);
+        await runExecute('UPDATE users SET password = ? WHERE id = ?', [hashed, user.id]);
+      }
       await runExecute(
         `INSERT INTO login_logs (id, userId, email, status, ipAddress, userAgent, createdAt)
          VALUES (?, ?, ?, ?, ?, ?, ?)` ,
@@ -185,7 +282,14 @@ app.post('/api/login', async (req, res) => {
     );
 
     const borrower = borrowerRows[0];
-    if (borrower && borrower.password === password) {
+    if (borrower && await verifyPassword(password, borrower.password)) {
+      if (!isBcryptHash(borrower.password)) {
+        const hashed = await hashPassword(password);
+        await runExecute(
+          'UPDATE borrowers SET password = ?, passwordUpdatedAt = ? WHERE id = ?',
+          [hashed, new Date().toISOString(), borrower.id]
+        );
+      }
       await runExecute(
         `INSERT INTO login_logs (id, userId, email, status, ipAddress, userAgent, createdAt)
          VALUES (?, ?, ?, ?, ?, ?, ?)` ,
@@ -290,11 +394,12 @@ app.post('/api/borrowers', async (req, res) => {
     const creditScore = payload.creditScore || 650;
     const status = payload.status || 'active';
     const tempPassword = generateTempPassword();
+    const hashedPassword = await hashPassword(tempPassword);
 
     await runExecute(
       `INSERT INTO borrowers (
         id, firstName, lastName, email, phone, dateOfBirth, address, employment,
-        monthlyIncome, bankName, accountNumber, accountType, routingNumber,
+        monthlyIncome, bankName, accountNumber, accountType, routingNumber, facialImage, idImage,
         password, passwordUpdatedAt, creditScore, status, registrationDate
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
@@ -311,7 +416,9 @@ app.post('/api/borrowers', async (req, res) => {
         payload.accountNumber || null,
         payload.accountType || null,
         payload.routingNumber || null,
-        tempPassword,
+        payload.facialImage || null,
+        payload.idImage || null,
+        hashedPassword,
         new Date().toISOString(),
         creditScore,
         status,
@@ -350,6 +457,8 @@ app.patch('/api/borrowers/:id', async (req, res) => {
            accountNumber = COALESCE(?, accountNumber),
            accountType = COALESCE(?, accountType),
            routingNumber = COALESCE(?, routingNumber),
+           facialImage = COALESCE(?, facialImage),
+           idImage = COALESCE(?, idImage),
            status = COALESCE(?, status)
        WHERE id = ?` ,
       [
@@ -364,6 +473,8 @@ app.patch('/api/borrowers/:id', async (req, res) => {
         payload.accountNumber || null,
         payload.accountType || null,
         payload.routingNumber || null,
+        payload.facialImage || null,
+        payload.idImage || null,
         payload.status || null,
         id
       ]
@@ -633,6 +744,12 @@ app.post('/api/users', async (req, res) => {
     const createdAt = new Date().toISOString();
     const status = payload.status || 'active';
 
+    const policyError = validatePasswordPolicy(payload.password);
+    if (policyError) {
+      return res.status(400).send(policyError);
+    }
+    const hashedPassword = await hashPassword(payload.password);
+
     await runExecute(
       `INSERT INTO users (id, name, email, password, createdAt, status, archivedAt)
        VALUES (?, ?, ?, ?, ?, ?, ?)` ,
@@ -640,7 +757,7 @@ app.post('/api/users', async (req, res) => {
         id,
         payload.name,
         payload.email,
-        payload.password,
+        hashedPassword,
         createdAt,
         status,
         payload.archivedAt || null
@@ -672,20 +789,32 @@ app.patch('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const payload = req.body;
 
+    const hasArchivedAt = payload.archivedAt !== undefined;
+
+    let passwordValue = null;
+    if (typeof payload.password === 'string' && payload.password.length > 0) {
+      const policyError = validatePasswordPolicy(payload.password);
+      if (policyError) {
+        return res.status(400).send(policyError);
+      }
+      passwordValue = await hashPassword(payload.password);
+    }
+
     await runExecute(
       `UPDATE users
        SET name = COALESCE(?, name),
            email = COALESCE(?, email),
            password = COALESCE(?, password),
            status = COALESCE(?, status),
-           archivedAt = COALESCE(?, archivedAt)
+           archivedAt = CASE WHEN ? THEN ? ELSE archivedAt END
        WHERE id = ?` ,
       [
         payload.name || null,
         payload.email || null,
-        payload.password || null,
+        passwordValue,
         payload.status || null,
-        payload.archivedAt !== undefined ? payload.archivedAt : null,
+        hasArchivedAt,
+        hasArchivedAt ? payload.archivedAt : null,
         id
       ]
     );
@@ -726,7 +855,8 @@ app.post('/api/users/reset-password', async (req, res) => {
     }
 
     const tempPassword = generateTempPassword();
-    await runExecute('UPDATE users SET password = ? WHERE id = ?', [tempPassword, user.id]);
+    const hashedPassword = await hashPassword(tempPassword);
+    await runExecute('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
     res.json({ tempPassword });
   } catch (error) {
     res.status(500).send(error.message);
@@ -742,9 +872,10 @@ app.post('/api/users/borrower-login', async (req, res) => {
 
     const rows = await runQuery('SELECT id FROM users WHERE email = ?', [email]);
     const tempPassword = generateTempPassword();
+    const hashedPassword = await hashPassword(tempPassword);
 
     if (rows.length) {
-      await runExecute('UPDATE users SET password = ? WHERE id = ?', [tempPassword, rows[0].id]);
+      await runExecute('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, rows[0].id]);
       return res.json({ tempPassword, created: false });
     }
 
@@ -752,7 +883,7 @@ app.post('/api/users/borrower-login', async (req, res) => {
     const createdAt = new Date().toISOString();
     await runExecute(
       'INSERT INTO users (id, name, email, password, createdAt, status, archivedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [userId, name, email, tempPassword, createdAt, 'active', null]
+      [userId, name, email, hashedPassword, createdAt, 'active', null]
     );
 
     const roleRows = await runQuery('SELECT id FROM roles WHERE name = ?', ['borrower']);
@@ -783,8 +914,16 @@ app.post('/api/borrowers/login', async (req, res) => {
     );
 
     const borrower = rows[0];
-    if (!borrower || borrower.password !== password) {
+    if (!borrower || !(await verifyPassword(password, borrower.password))) {
       return res.status(401).send('Invalid credentials.');
+    }
+
+    if (!isBcryptHash(borrower.password)) {
+      const hashed = await hashPassword(password);
+      await runExecute(
+        'UPDATE borrowers SET password = ?, passwordUpdatedAt = ? WHERE id = ?',
+        [hashed, new Date().toISOString(), borrower.id]
+      );
     }
 
     res.json({
@@ -805,15 +944,21 @@ app.post('/api/borrowers/change-password', async (req, res) => {
       return res.status(400).send('Email, current password, and new password are required.');
     }
 
+    const policyError = validatePasswordPolicy(newPassword);
+    if (policyError) {
+      return res.status(400).send(policyError);
+    }
+
     const rows = await runQuery('SELECT id, password FROM borrowers WHERE email = ? LIMIT 1', [email]);
     const borrower = rows[0];
-    if (!borrower || borrower.password !== currentPassword) {
+    if (!borrower || !(await verifyPassword(currentPassword, borrower.password))) {
       return res.status(401).send('Invalid credentials.');
     }
 
+    const hashedPassword = await hashPassword(newPassword);
     await runExecute(
       'UPDATE borrowers SET password = ?, passwordUpdatedAt = ? WHERE id = ?',
-      [newPassword, new Date().toISOString(), borrower.id]
+      [hashedPassword, new Date().toISOString(), borrower.id]
     );
 
     res.json({ ok: true });
@@ -836,9 +981,10 @@ app.post('/api/borrowers/reset-password', async (req, res) => {
     }
 
     const tempPassword = generateTempPassword();
+    const hashedPassword = await hashPassword(tempPassword);
     await runExecute(
       'UPDATE borrowers SET password = ?, passwordUpdatedAt = ? WHERE id = ?',
-      [tempPassword, new Date().toISOString(), borrower.id]
+      [hashedPassword, new Date().toISOString(), borrower.id]
     );
 
     res.json({ tempPassword });

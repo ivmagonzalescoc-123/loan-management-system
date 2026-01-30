@@ -25,8 +25,8 @@ export function Dashboard({ user }: DashboardProps) {
   const totalActiveLoans = loans.filter(l => l.status === 'active').length;
   const totalOutstanding = loans
     .filter(l => l.status === 'active')
-    .reduce((sum, loan) => sum + loan.outstandingBalance, 0);
-  const totalDisbursed = loans.reduce((sum, loan) => sum + loan.principalAmount, 0);
+    .reduce((sum, loan) => sum + Number(loan.outstandingBalance || 0), 0);
+  const totalDisbursed = loans.reduce((sum, loan) => sum + Number(loan.principalAmount || 0), 0);
   
   const pendingApplications = loanApplications.filter(a => a.status === 'pending').length;
   const approvedApplications = loanApplications.filter(a => a.status === 'approved').length;

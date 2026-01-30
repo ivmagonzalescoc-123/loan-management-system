@@ -39,6 +39,8 @@ export interface CreateBorrowerPayload {
   accountNumber?: string;
   accountType?: string;
   routingNumber?: string;
+  facialImage?: string;
+  idImage?: string;
   creditScore?: number;
   status?: 'active' | 'inactive' | 'blacklisted';
   registrationDate?: string;
@@ -61,6 +63,8 @@ export interface UpdateBorrowerPayload {
   accountNumber?: string;
   accountType?: string;
   routingNumber?: string;
+  facialImage?: string;
+  idImage?: string;
   status?: 'active' | 'inactive' | 'blacklisted';
 }
 

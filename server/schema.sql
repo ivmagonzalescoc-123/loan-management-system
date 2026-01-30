@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS borrowers (
   accountNumber VARCHAR(50),
   accountType VARCHAR(50),
   routingNumber VARCHAR(50),
+  facialImage LONGTEXT,
+  idImage LONGTEXT,
   password VARCHAR(255),
   passwordUpdatedAt VARCHAR(30),
   creditScore INT NOT NULL,
@@ -87,6 +89,12 @@ CREATE TABLE IF NOT EXISTS roles (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(50) NOT NULL UNIQUE
 );
+
+INSERT IGNORE INTO roles (name) VALUES ('admin');
+INSERT IGNORE INTO roles (name) VALUES ('loan_officer');
+INSERT IGNORE INTO roles (name) VALUES ('cashier');
+INSERT IGNORE INTO roles (name) VALUES ('borrower');
+INSERT IGNORE INTO roles (name) VALUES ('auditor');
 
 CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(20) PRIMARY KEY,

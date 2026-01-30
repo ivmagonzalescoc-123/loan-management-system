@@ -12,6 +12,8 @@ export interface Borrower {
   accountNumber?: string;
   accountType?: string;
   routingNumber?: string;
+  facialImage?: string;
+  idImage?: string;
   creditScore: number;
   status: 'active' | 'inactive' | 'blacklisted';
   registrationDate: string;

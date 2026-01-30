@@ -12,6 +12,10 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
   const { data: loans, refresh: refreshLoans } = useLoans();
   const { data: payments, refresh: refreshPayments } = usePayments();
   const [searchTerm, setSearchTerm] = useState('');
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<'all' | 'paid' | 'late' | 'pending'>('all');
+  const [paymentDateFrom, setPaymentDateFrom] = useState('');
+  const [paymentDateTo, setPaymentDateTo] = useState('');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -38,8 +42,46 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
     return dueDate < today;
   });
 
-  const totalCollected = payments.reduce((sum, payment) => sum + payment.amount, 0);
-  const totalOutstanding = activeLoans.reduce((sum, loan) => sum + loan.outstandingBalance, 0);
+  const totalCollected = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const totalOutstanding = activeLoans.reduce((sum, loan) => sum + Number(loan.outstandingBalance || 0), 0);
+
+  const filteredPayments = payments
+    .filter((payment) => {
+      if (paymentStatusFilter !== 'all' && payment.status !== paymentStatusFilter) return false;
+
+      const pDate = new Date(payment.paymentDate);
+      if (paymentDateFrom) {
+        const from = new Date(paymentDateFrom);
+        from.setHours(0, 0, 0, 0);
+        if (pDate < from) return false;
+      }
+      if (paymentDateTo) {
+        const to = new Date(paymentDateTo);
+        to.setHours(23, 59, 59, 999);
+        if (pDate > to) return false;
+      }
+
+      const q = paymentSearchQuery.trim().toLowerCase();
+      if (!q) return true;
+
+      const haystack = [
+        payment.receiptNumber,
+        payment.borrowerName,
+        payment.loanId,
+        payment.paymentDate,
+        payment.dueDate,
+        payment.status,
+        payment.receivedBy,
+        String(payment.amount ?? ''),
+        String(payment.lateFee ?? ''),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(q);
+    })
+    .sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
 
   const handleRecordPayment = (loanId: string) => {
     setSelectedLoan(loanId);
@@ -159,7 +201,11 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {activeLoans.map(loan => {
-                const paidPercentage = ((loan.principalAmount - loan.outstandingBalance) / loan.principalAmount) * 100;
+                const principalAmount = Number(loan.principalAmount || 0);
+                const outstandingBalance = Number(loan.outstandingBalance || 0);
+                const paidPercentage = principalAmount > 0
+                  ? ((principalAmount - outstandingBalance) / principalAmount) * 100
+                  : 0;
                 const dueDate = new Date(loan.nextDueDate);
                 const today = new Date();
                 const isOverdue = dueDate < today;
@@ -215,10 +261,75 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
       {/* Recent Payments */}
       <div className="bg-white rounded-lg border border-gray-200">
         <div className="p-6 border-b border-gray-200">
-          <h3 className="text-gray-900 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-green-600" />
-            Recent Payments
-          </h3>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h3 className="text-gray-900 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-green-600" />
+                Recent Payments
+              </h3>
+              <div className="text-xs text-gray-600">
+                Showing <span className="text-gray-900">{filteredPayments.length}</span> of{' '}
+                <span className="text-gray-900">{payments.length}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row md:items-end gap-3">
+              <div className="w-full md:flex-1">
+                <label className="block text-xs text-gray-600 mb-1">Search</label>
+                <input
+                  value={paymentSearchQuery}
+                  onChange={(e) => setPaymentSearchQuery(e.target.value)}
+                  placeholder="Search receipt, borrower, loan ID, received by..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="w-full md:w-40">
+                <label className="block text-xs text-gray-600 mb-1">Status</label>
+                <select
+                  value={paymentStatusFilter}
+                  onChange={(e) => setPaymentStatusFilter(e.target.value as 'all' | 'paid' | 'late' | 'pending')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All</option>
+                  <option value="paid">Paid</option>
+                  <option value="late">Late</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+              <div className="w-full md:w-40">
+                <label className="block text-xs text-gray-600 mb-1">From</label>
+                <input
+                  type="date"
+                  value={paymentDateFrom}
+                  onChange={(e) => setPaymentDateFrom(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="w-full md:w-40">
+                <label className="block text-xs text-gray-600 mb-1">To</label>
+                <input
+                  type="date"
+                  value={paymentDateTo}
+                  onChange={(e) => setPaymentDateTo(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex justify-end md:justify-start">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentSearchQuery('');
+                    setPaymentStatusFilter('all');
+                    setPaymentDateFrom('');
+                    setPaymentDateTo('');
+                  }}
+                  className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -234,12 +345,12 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {payments.map(payment => (
+              {filteredPayments.map(payment => (
                 <tr key={payment.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm text-gray-900">{payment.receiptNumber}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{payment.borrowerName}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    ${payment.amount.toLocaleString()}
+                    ${Number(payment.amount || 0).toLocaleString()}
                     {payment.lateFee && (
                       <span className="text-xs text-red-600 ml-1">
                         (+${payment.lateFee} late fee)

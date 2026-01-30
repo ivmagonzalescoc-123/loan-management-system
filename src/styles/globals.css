@@ -131,6 +131,47 @@
   }
 }
 
+@layer base {
+  :where(button, a, [role='button'], [data-clickable], input[type='button'], input[type='submit']) {
+    transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease, background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+
+  :where(button, a, [role='button'], [data-clickable], input[type='button'], input[type='submit']):not(:disabled):not([aria-disabled='true']):hover {
+    transform: translateY(-1px);
+    filter: brightness(1.03);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  :where(button, a, [role='button'], [data-clickable], input[type='button'], input[type='submit']):not(:disabled):not([aria-disabled='true']):active {
+    transform: translateY(0);
+    filter: brightness(0.98);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  :where(button, [role='button'], [data-clickable], input[type='button'], input[type='submit']) {
+    cursor: pointer;
+  }
+
+  :where(button, a, [role='button'], [data-clickable], input[type='button'], input[type='submit']):disabled,
+  :where(button, a, [role='button'], [data-clickable], input[type='button'], input[type='submit'])[aria-disabled='true'] {
+    cursor: not-allowed;
+    filter: none;
+    box-shadow: none;
+    transform: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(button, a, [role='button'], [data-clickable], input[type='button'], input[type='submit']) {
+      transition: none;
+    }
+
+    :where(button, a, [role='button'], [data-clickable], input[type='button'], input[type='submit']):not(:disabled):not([aria-disabled='true']):hover,
+    :where(button, a, [role='button'], [data-clickable], input[type='button'], input[type='submit']):not(:disabled):not([aria-disabled='true']):active {
+      transform: none;
+    }
+  }
+}
+
 /**
  * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
  */

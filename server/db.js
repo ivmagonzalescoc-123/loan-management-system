@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
@@ -25,6 +26,8 @@ async function init() {
       accountNumber VARCHAR(50),
       accountType VARCHAR(50),
       routingNumber VARCHAR(50),
+      facialImage LONGTEXT,
+      idImage LONGTEXT,
       password VARCHAR(255),
       passwordUpdatedAt VARCHAR(30),
       creditScore INT NOT NULL,
@@ -172,6 +175,8 @@ async function init() {
   await addColumnIfMissing('borrowers', 'accountNumber VARCHAR(50)');
   await addColumnIfMissing('borrowers', 'accountType VARCHAR(50)');
   await addColumnIfMissing('borrowers', 'routingNumber VARCHAR(50)');
+  await addColumnIfMissing('borrowers', 'facialImage LONGTEXT');
+  await addColumnIfMissing('borrowers', 'idImage LONGTEXT');
   await addColumnIfMissing('borrowers', 'password VARCHAR(255)');
   await addColumnIfMissing('borrowers', 'passwordUpdatedAt VARCHAR(30)');
   await addColumnIfMissing('users', 'status TINYINT(1) NOT NULL DEFAULT 1');
@@ -182,20 +187,52 @@ async function init() {
     await pool.query('INSERT IGNORE INTO roles (name) VALUES (?)', [role]);
   }
 
+  const [adminRoleRows] = await pool.query('SELECT id FROM roles WHERE name = ? LIMIT 1', ['admin']);
+  const adminRoleId = Array.isArray(adminRoleRows) ? adminRoleRows[0]?.id : null;
+
   const [userRows] = await pool.query('SELECT COUNT(*) as count FROM users');
   const userCount = Array.isArray(userRows) ? userRows[0]?.count : 0;
   if (!userCount) {
     const adminId = `US${Date.now().toString().slice(-6)}`;
     const createdAt = new Date().toISOString();
+
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@lms.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@1234';
+    const passwordOk = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(adminPassword);
+    if (!passwordOk) {
+      throw new Error(
+        'Default admin password must be at least 8 characters and include upper, lower, number, and special character. Set ADMIN_PASSWORD in .env.'
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
     await pool.query(
       'INSERT INTO users (id, name, email, password, createdAt) VALUES (?, ?, ?, ?, ?)',
-      [adminId, 'Admin User', 'admin@lms.com', 'admin123', createdAt]
+      [adminId, 'Admin User', adminEmail, hashedPassword, createdAt]
     );
 
-    const [roleRows] = await pool.query('SELECT id FROM roles WHERE name = ?', ['admin']);
-    const adminRoleId = Array.isArray(roleRows) ? roleRows[0]?.id : null;
     if (adminRoleId) {
       await pool.query('INSERT IGNORE INTO user_roles (userId, roleId) VALUES (?, ?)', [adminId, adminRoleId]);
+    }
+    return;
+  }
+
+  // If there are users but none has the admin role yet, promote the oldest user.
+  if (adminRoleId) {
+    const [adminAssignedRows] = await pool.query(
+      'SELECT COUNT(*) as count FROM user_roles WHERE roleId = ?',
+      [adminRoleId]
+    );
+    const adminAssigned = Array.isArray(adminAssignedRows) ? adminAssignedRows[0]?.count : 0;
+    if (!adminAssigned) {
+      const [firstUserRows] = await pool.query(
+        'SELECT id FROM users ORDER BY createdAt ASC LIMIT 1'
+      );
+      const firstUserId = Array.isArray(firstUserRows) ? firstUserRows[0]?.id : null;
+      if (firstUserId) {
+        await pool.query('INSERT IGNORE INTO user_roles (userId, roleId) VALUES (?, ?)', [firstUserId, adminRoleId]);
+        await pool.query('UPDATE users SET status = 1 WHERE id = ?', [firstUserId]);
+      }
     }
   }
 }

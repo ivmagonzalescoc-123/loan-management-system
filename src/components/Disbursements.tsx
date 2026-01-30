@@ -27,10 +27,10 @@ export function Disbursements({ user }: DisbursementsProps) {
     loan.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalDisbursed = loans.reduce((sum, loan) => sum + loan.principalAmount, 0);
+  const totalDisbursed = loans.reduce((sum, loan) => sum + Number(loan.principalAmount || 0), 0);
   const totalOutstanding = loans
     .filter(l => l.status === 'active')
-    .reduce((sum, loan) => sum + loan.outstandingBalance, 0);
+    .reduce((sum, loan) => sum + Number(loan.outstandingBalance || 0), 0);
 
   return (
     <div className="space-y-6">

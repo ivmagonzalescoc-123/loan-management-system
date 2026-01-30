@@ -10,6 +10,7 @@ interface AddBorrowerFormProps {
 export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
   const [step, setStep] = useState(1);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [imageErrors, setImageErrors] = useState<{ face?: string; id?: string }>({});
   const [formData, setFormData] = useState({
     // Personal Information
     firstName: '',
@@ -24,6 +25,10 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
     nationality: '',
     idType: 'national_id',
     idNumber: '',
+    facialImage: '',
+    facialImageName: '',
+    idImage: '',
+    idImageName: '',
     
     // Address Information
     address: '',
@@ -75,6 +80,51 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const MAX_IMAGE_SIZE_MB = 2;
+  const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+  const handleImageChange = (field: 'facialImage' | 'idImage') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: '',
+        [`${field}Name`]: ''
+      }));
+      setImageErrors(prev => ({ ...prev, [field === 'facialImage' ? 'face' : 'id']: undefined }));
+      return;
+    }
+
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      setImageErrors(prev => ({
+        ...prev,
+        [field === 'facialImage' ? 'face' : 'id']: 'Please upload a JPG, PNG, or WebP image.'
+      }));
+      return;
+    }
+
+    const sizeMb = file.size / (1024 * 1024);
+    if (sizeMb > MAX_IMAGE_SIZE_MB) {
+      setImageErrors(prev => ({
+        ...prev,
+        [field === 'facialImage' ? 'face' : 'id']: `File must be ${MAX_IMAGE_SIZE_MB}MB or less.`
+      }));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      setFormData(prev => ({
+        ...prev,
+        [field]: result,
+        [`${field}Name`]: file.name
+      }));
+      setImageErrors(prev => ({ ...prev, [field === 'facialImage' ? 'face' : 'id']: undefined }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async () => {
     const address = [formData.address, formData.city, formData.state, formData.zipCode, formData.country]
       .filter(Boolean)
@@ -97,7 +147,9 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
         bankName: formData.bankName || undefined,
         accountNumber: formData.accountNumber || undefined,
         accountType: formData.accountType || undefined,
-        routingNumber: formData.routingNumber || undefined
+        routingNumber: formData.routingNumber || undefined,
+        facialImage: formData.facialImage || undefined,
+        idImage: formData.idImage || undefined
       });
       if (result?.tempPassword) {
         setTempPassword(result.tempPassword);
@@ -315,6 +367,55 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-2">Facial Photo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange('facialImage')}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">JPG, PNG, or WebP up to {MAX_IMAGE_SIZE_MB}MB.</p>
+                  {imageErrors.face && (
+                    <p className="text-xs text-red-600 mt-1">{imageErrors.face}</p>
+                  )}
+                  {formData.facialImage && (
+                    <div className="mt-3 rounded-lg border border-gray-200 p-2 bg-gray-50">
+                      <img
+                        src={formData.facialImage}
+                        alt="Facial preview"
+                        className="h-32 w-full object-cover rounded"
+                      />
+                      <div className="text-xs text-gray-500 mt-2">{formData.facialImageName}</div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-2">ID Photo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange('idImage')}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">JPG, PNG, or WebP up to {MAX_IMAGE_SIZE_MB}MB.</p>
+                  {imageErrors.id && (
+                    <p className="text-xs text-red-600 mt-1">{imageErrors.id}</p>
+                  )}
+                  {formData.idImage && (
+                    <div className="mt-3 rounded-lg border border-gray-200 p-2 bg-gray-50">
+                      <img
+                        src={formData.idImage}
+                        alt="ID preview"
+                        className="h-32 w-full object-cover rounded"
+                      />
+                      <div className="text-xs text-gray-500 mt-2">{formData.idImageName}</div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
