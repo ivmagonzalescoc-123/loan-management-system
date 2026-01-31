@@ -14,6 +14,7 @@ export interface Borrower {
   routingNumber?: string;
   facialImage?: string;
   idImage?: string;
+  profileImage?: string;
   creditScore: number;
   status: 'active' | 'inactive' | 'blacklisted';
   registrationDate: string;
@@ -38,6 +39,18 @@ export interface LoanApplication {
   interestRate?: number;
   termMonths?: number;
   creditScore: number;
+  eligibilityStatus?: 'pending' | 'eligible' | 'ineligible' | 'manual_review';
+  eligibilityScore?: number;
+  incomeRatio?: number;
+  debtToIncome?: number;
+  riskTier?: 'low' | 'medium' | 'high';
+  kycStatus?: 'pending' | 'verified' | 'rejected';
+  documentStatus?: 'pending' | 'complete' | 'missing';
+  recommendation?: string;
+  interestType?: 'simple' | 'compound';
+  gracePeriodDays?: number;
+  penaltyRate?: number;
+  penaltyFlat?: number;
 }
 
 export interface Loan {
@@ -60,6 +73,12 @@ export interface Loan {
   status: 'active' | 'completed' | 'defaulted' | 'written_off';
   outstandingBalance: number;
   nextDueDate: string;
+  interestType?: 'simple' | 'compound';
+  gracePeriodDays?: number;
+  penaltyRate?: number;
+  penaltyFlat?: number;
+  closureCertificateNumber?: string | null;
+  closedDate?: string | null;
 }
 
 export interface Payment {
@@ -73,6 +92,70 @@ export interface Payment {
   lateFee?: number;
   receivedBy: string;
   receiptNumber: string;
+}
+
+export interface LoanApproval {
+  id: string;
+  applicationId: string;
+  approvalStage: 'loan_officer' | 'cashier' | 'manager' | 'auditor';
+  decision: 'approved' | 'rejected';
+  decidedBy: string;
+  decidedById?: string | null;
+  notes?: string | null;
+  decidedAt: string;
+}
+
+export interface Notification {
+  id: string;
+  borrowerId?: string | null;
+  loanId?: string | null;
+  type: 'payment_due' | 'payment_overdue' | 'approval_pending' | 'kyc_pending' | 'general';
+  title: string;
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+  status: 'unread' | 'read';
+  referenceKey?: string | null;
+  createdAt: string;
+}
+
+export interface LoanTransfer {
+  id: string;
+  loanId: string;
+  fromBorrowerId: string;
+  toBorrowerId: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedBy: string;
+  approvedBy?: string | null;
+  effectiveDate?: string | null;
+  createdAt: string;
+  notes?: string | null;
+}
+
+export interface LoanRestructure {
+  id: string;
+  loanId: string;
+  restructureType: 'restructure' | 'refinance';
+  newTermMonths?: number | null;
+  newInterestRate?: number | null;
+  newMonthlyPayment?: number | null;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedBy: string;
+  approvedBy?: string | null;
+  effectiveDate?: string | null;
+  createdAt: string;
+  notes?: string | null;
+}
+
+export interface LoanClosure {
+  id: string;
+  loanId: string;
+  borrowerId: string;
+  closedAt: string;
+  closedBy: string;
+  certificateNumber: string;
+  remarks?: string | null;
 }
 
 export interface RepaymentSchedule {
@@ -118,7 +201,11 @@ export interface AppUser {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
+  phone?: string;
+  address?: string;
+  dateOfBirth?: string;
+  profileImage?: string;
+  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
   createdAt: string;
   status?: 'active' | 'inactive' | 'archived';
   archivedAt?: string | null;

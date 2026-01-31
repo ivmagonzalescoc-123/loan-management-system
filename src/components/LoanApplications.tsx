@@ -134,6 +134,7 @@ export function LoanApplications({ user }: LoanApplicationsProps) {
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Loan Type</th>
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Requested Amount</th>
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Credit Score</th>
+                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Eligibility</th>
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Application Date</th>
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Actions</th>
@@ -161,6 +162,15 @@ export function LoanApplications({ user }: LoanApplicationsProps) {
                     }`}>
                       {app.creditScore}
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs capitalize ${
+                      app.eligibilityStatus === 'eligible' ? 'bg-green-100 text-green-700' :
+                      app.eligibilityStatus === 'ineligible' ? 'bg-red-100 text-red-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {app.eligibilityStatus || 'pending'}
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">{app.applicationDate}</td>
                   <td className="px-6 py-4">

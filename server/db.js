@@ -44,6 +44,7 @@ async function init() {
       routingNumber VARCHAR(50),
       facialImage LONGTEXT,
       idImage LONGTEXT,
+      profileImage LONGTEXT,
       password VARCHAR(255),
       passwordUpdatedAt VARCHAR(30),
       creditScore INT NOT NULL,
@@ -71,7 +72,19 @@ async function init() {
       approvedAmount DECIMAL(12,2),
       interestRate DECIMAL(6,2),
       termMonths INT,
-      creditScore INT NOT NULL
+      creditScore INT NOT NULL,
+      eligibilityStatus VARCHAR(20),
+      eligibilityScore INT,
+      incomeRatio DECIMAL(6,2),
+      debtToIncome DECIMAL(6,2),
+      riskTier VARCHAR(20),
+      kycStatus VARCHAR(20),
+      documentStatus VARCHAR(20),
+      recommendation TEXT,
+      interestType VARCHAR(20),
+      gracePeriodDays INT,
+      penaltyRate DECIMAL(6,2),
+      penaltyFlat DECIMAL(12,2)
     )
   `);
 
@@ -95,7 +108,13 @@ async function init() {
       disbursementMeta LONGTEXT,
       status VARCHAR(20) NOT NULL,
       outstandingBalance DECIMAL(12,2) NOT NULL,
-      nextDueDate VARCHAR(20) NOT NULL
+      nextDueDate VARCHAR(20) NOT NULL,
+      interestType VARCHAR(20),
+      gracePeriodDays INT,
+      penaltyRate DECIMAL(6,2),
+      penaltyFlat DECIMAL(12,2),
+      closureCertificateNumber VARCHAR(50),
+      closedDate VARCHAR(20)
     )
   `);
 
@@ -154,6 +173,10 @@ async function init() {
       id VARCHAR(20) PRIMARY KEY,
       name VARCHAR(150) NOT NULL,
       email VARCHAR(150) NOT NULL UNIQUE,
+      phone VARCHAR(50),
+      address VARCHAR(255),
+      dateOfBirth VARCHAR(20),
+      profileImage LONGTEXT,
       password VARCHAR(255) NOT NULL,
       createdAt VARCHAR(30) NOT NULL,
       status TINYINT(1) NOT NULL DEFAULT 1,
@@ -194,6 +217,82 @@ async function init() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS loan_application_approvals (
+      id VARCHAR(20) PRIMARY KEY,
+      applicationId VARCHAR(20) NOT NULL,
+      approvalStage VARCHAR(20) NOT NULL,
+      decision VARCHAR(20) NOT NULL,
+      decidedBy VARCHAR(150) NOT NULL,
+      decidedById VARCHAR(50),
+      notes TEXT,
+      decidedAt VARCHAR(30) NOT NULL,
+      UNIQUE KEY uniq_loan_application_approvals (applicationId, approvalStage)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id VARCHAR(20) PRIMARY KEY,
+      borrowerId VARCHAR(20),
+      loanId VARCHAR(20),
+      type VARCHAR(30) NOT NULL,
+      title VARCHAR(150) NOT NULL,
+      message TEXT NOT NULL,
+      severity VARCHAR(20) NOT NULL,
+      status VARCHAR(20) NOT NULL,
+      referenceKey VARCHAR(100),
+      createdAt VARCHAR(30) NOT NULL,
+      UNIQUE KEY uniq_notifications_referenceKey (referenceKey)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS loan_transfers (
+      id VARCHAR(20) PRIMARY KEY,
+      loanId VARCHAR(20) NOT NULL,
+      fromBorrowerId VARCHAR(20) NOT NULL,
+      toBorrowerId VARCHAR(20) NOT NULL,
+      reason TEXT NOT NULL,
+      status VARCHAR(20) NOT NULL,
+      requestedBy VARCHAR(150) NOT NULL,
+      approvedBy VARCHAR(150),
+      effectiveDate VARCHAR(20),
+      createdAt VARCHAR(30) NOT NULL,
+      notes TEXT
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS loan_restructures (
+      id VARCHAR(20) PRIMARY KEY,
+      loanId VARCHAR(20) NOT NULL,
+      restructureType VARCHAR(20) NOT NULL,
+      newTermMonths INT,
+      newInterestRate DECIMAL(6,2),
+      newMonthlyPayment DECIMAL(12,2),
+      reason TEXT NOT NULL,
+      status VARCHAR(20) NOT NULL,
+      requestedBy VARCHAR(150) NOT NULL,
+      approvedBy VARCHAR(150),
+      effectiveDate VARCHAR(20),
+      createdAt VARCHAR(30) NOT NULL,
+      notes TEXT
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS loan_closures (
+      id VARCHAR(20) PRIMARY KEY,
+      loanId VARCHAR(20) NOT NULL,
+      borrowerId VARCHAR(20) NOT NULL,
+      closedAt VARCHAR(30) NOT NULL,
+      closedBy VARCHAR(150) NOT NULL,
+      certificateNumber VARCHAR(50) NOT NULL,
+      remarks TEXT
+    )
+  `);
+
   const addColumnIfMissing = async (table, columnDef) => {
     try {
       await pool.query(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
@@ -211,15 +310,39 @@ async function init() {
   await addColumnIfMissing('borrowers', 'routingNumber VARCHAR(50)');
   await addColumnIfMissing('borrowers', 'facialImage LONGTEXT');
   await addColumnIfMissing('borrowers', 'idImage LONGTEXT');
+  await addColumnIfMissing('borrowers', 'profileImage LONGTEXT');
   await addColumnIfMissing('borrowers', 'password VARCHAR(255)');
   await addColumnIfMissing('borrowers', 'passwordUpdatedAt VARCHAR(30)');
   await addColumnIfMissing('users', 'status TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('users', 'archivedAt VARCHAR(30)');
+  await addColumnIfMissing('users', 'phone VARCHAR(50)');
+  await addColumnIfMissing('users', 'address VARCHAR(255)');
+  await addColumnIfMissing('users', 'dateOfBirth VARCHAR(20)');
+  await addColumnIfMissing('users', 'profileImage LONGTEXT');
+
+  await addColumnIfMissing('loan_applications', 'eligibilityStatus VARCHAR(20)');
+  await addColumnIfMissing('loan_applications', 'eligibilityScore INT');
+  await addColumnIfMissing('loan_applications', 'incomeRatio DECIMAL(6,2)');
+  await addColumnIfMissing('loan_applications', 'debtToIncome DECIMAL(6,2)');
+  await addColumnIfMissing('loan_applications', 'riskTier VARCHAR(20)');
+  await addColumnIfMissing('loan_applications', 'kycStatus VARCHAR(20)');
+  await addColumnIfMissing('loan_applications', 'documentStatus VARCHAR(20)');
+  await addColumnIfMissing('loan_applications', 'recommendation TEXT');
+  await addColumnIfMissing('loan_applications', 'interestType VARCHAR(20)');
+  await addColumnIfMissing('loan_applications', 'gracePeriodDays INT');
+  await addColumnIfMissing('loan_applications', 'penaltyRate DECIMAL(6,2)');
+  await addColumnIfMissing('loan_applications', 'penaltyFlat DECIMAL(12,2)');
 
   await addColumnIfMissing('loans', 'disbursementMethod VARCHAR(50)');
   await addColumnIfMissing('loans', 'referenceNumber VARCHAR(50)');
   await addColumnIfMissing('loans', 'receiptNumber VARCHAR(50)');
   await addColumnIfMissing('loans', 'disbursementMeta LONGTEXT');
+  await addColumnIfMissing('loans', 'interestType VARCHAR(20)');
+  await addColumnIfMissing('loans', 'gracePeriodDays INT');
+  await addColumnIfMissing('loans', 'penaltyRate DECIMAL(6,2)');
+  await addColumnIfMissing('loans', 'penaltyFlat DECIMAL(12,2)');
+  await addColumnIfMissing('loans', 'closureCertificateNumber VARCHAR(50)');
+  await addColumnIfMissing('loans', 'closedDate VARCHAR(20)');
 
   // Ensure receipt table columns exist if schema evolves.
   await addColumnIfMissing('disbursement_receipts', 'referenceNumber VARCHAR(50)');
@@ -276,7 +399,7 @@ async function init() {
     console.warn('Warning: Could not backfill disbursement receipts automatically.', error?.message || error);
   }
 
-  const roles = ['admin', 'loan_officer', 'cashier', 'borrower', 'auditor'];
+  const roles = ['admin', 'manager', 'loan_officer', 'cashier', 'borrower', 'auditor'];
   for (const role of roles) {
     await pool.query('INSERT IGNORE INTO roles (name) VALUES (?)', [role]);
   }

@@ -48,6 +48,7 @@ export function BorrowerLoanHistory({ user }: BorrowerLoanHistoryProps) {
                   <th className="px-4 py-2 text-left text-xs text-gray-600 uppercase tracking-wider">Principal</th>
                   <th className="px-4 py-2 text-left text-xs text-gray-600 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-2 text-left text-xs text-gray-600 uppercase tracking-wider">Disbursed</th>
+                  <th className="px-4 py-2 text-left text-xs text-gray-600 uppercase tracking-wider">Closure</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -67,6 +68,16 @@ export function BorrowerLoanHistory({ user }: BorrowerLoanHistoryProps) {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-sm text-gray-900">{loan.disbursedDate}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {loan.closureCertificateNumber ? (
+                        <div>
+                          <div className="text-xs text-gray-500">Certificate</div>
+                          <div className="text-sm text-gray-900">{loan.closureCertificateNumber}</div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

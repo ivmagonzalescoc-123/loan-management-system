@@ -103,6 +103,124 @@ const generateAuthCode = () => {
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+const addDays = (dateStr, days) => {
+  const date = dateStr ? new Date(dateStr) : new Date();
+  if (Number.isNaN(date.getTime())) return dateStr;
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split('T')[0];
+};
+
+const addMonths = (dateStr, months) => {
+  const date = dateStr ? new Date(dateStr) : new Date();
+  if (Number.isNaN(date.getTime())) return dateStr;
+  date.setMonth(date.getMonth() + months);
+  return date.toISOString().split('T')[0];
+};
+
+const calculateLoanTotals = (principal, rate, months, interestType = 'compound') => {
+  const safePrincipal = Number(principal || 0);
+  const safeRate = Number(rate || 0);
+  const safeMonths = Math.max(1, Number(months || 1));
+  if (!safePrincipal || !Number.isFinite(safePrincipal)) {
+    return { monthlyPayment: 0, totalAmount: 0 };
+  }
+
+  if (interestType === 'simple') {
+    const totalAmount = safePrincipal * (1 + (safeRate / 100) * (safeMonths / 12));
+    return { monthlyPayment: totalAmount / safeMonths, totalAmount };
+  }
+
+  const monthlyRate = safeRate / 100 / 12;
+  if (!monthlyRate) {
+    return { monthlyPayment: safePrincipal / safeMonths, totalAmount: safePrincipal };
+  }
+  const factor = Math.pow(1 + monthlyRate, safeMonths);
+  const monthlyPayment = (safePrincipal * monthlyRate * factor) / (factor - 1);
+  return { monthlyPayment, totalAmount: monthlyPayment * safeMonths };
+};
+
+const getBorrowerKycStatus = (borrower) => {
+  if (!borrower) return 'pending';
+  const hasImages = Boolean(borrower.facialImage && borrower.idImage);
+  return hasImages ? 'verified' : 'pending';
+};
+
+const computeEligibility = async (payload) => {
+  const borrowerRows = await runQuery(
+    'SELECT id, monthlyIncome, creditScore, facialImage, idImage FROM borrowers WHERE id = ? LIMIT 1',
+    [payload.borrowerId]
+  );
+  const borrower = borrowerRows[0];
+  if (!borrower) return null;
+
+  const loanRows = await runQuery(
+    'SELECT outstandingBalance, status FROM loans WHERE borrowerId = ? AND status IN ("active", "defaulted")',
+    [payload.borrowerId]
+  );
+
+  const requestedAmount = Number(payload.requestedAmount || 0);
+  const monthlyIncome = Number(borrower.monthlyIncome || 0);
+  const annualIncome = monthlyIncome * 12;
+  const totalOutstanding = loanRows.reduce((sum, l) => sum + Number(l.outstandingBalance || 0), 0);
+  const incomeRatio = annualIncome > 0 ? requestedAmount / annualIncome : 1;
+  const debtToIncome = annualIncome > 0 ? totalOutstanding / annualIncome : 1;
+
+  const creditScore = Number(payload.creditScore || borrower.creditScore || 0);
+  const normalizedCredit = clamp((creditScore - 300) / 550, 0, 1);
+  const incomeScore = clamp(1 - incomeRatio, 0, 1);
+  const dtiScore = clamp(1 - debtToIncome, 0, 1);
+  const collateralScore = payload.collateralValue ? clamp(Number(payload.collateralValue || 0) / requestedAmount, 0, 1) : 0.2;
+
+  const rawScore = (normalizedCredit * 0.5 + incomeScore * 0.2 + dtiScore * 0.2 + collateralScore * 0.1) * 100;
+  const eligibilityScore = Math.round(clamp(rawScore, 0, 100));
+
+  let riskTier = 'high';
+  if (eligibilityScore >= 75 && debtToIncome <= 0.5) riskTier = 'low';
+  else if (eligibilityScore >= 55) riskTier = 'medium';
+
+  let eligibilityStatus = 'manual_review';
+  if (creditScore >= 650 && debtToIncome <= 0.5) eligibilityStatus = 'eligible';
+  if (creditScore < 580 || debtToIncome > 0.7) eligibilityStatus = 'ineligible';
+
+  const kycStatus = getBorrowerKycStatus(borrower);
+  const documentStatus = kycStatus === 'verified' ? 'complete' : 'missing';
+
+  const recommendation = eligibilityStatus === 'eligible'
+    ? 'Eligible based on credit score and income ratio. Proceed with standard underwriting.'
+    : eligibilityStatus === 'ineligible'
+    ? 'Ineligible due to risk indicators. Consider rejection or require strong collateral.'
+    : 'Requires manual review for risk assessment.';
+
+  return {
+    eligibilityStatus,
+    eligibilityScore,
+    incomeRatio: Number(incomeRatio.toFixed(2)),
+    debtToIncome: Number(debtToIncome.toFixed(2)),
+    riskTier,
+    kycStatus,
+    documentStatus,
+    recommendation
+  };
+};
+
+const calculateLateFee = (paymentDate, dueDate, gracePeriodDays, penaltyRate, penaltyFlat, amount) => {
+  const paidDate = paymentDate ? new Date(paymentDate) : new Date();
+  const due = dueDate ? new Date(dueDate) : new Date();
+  if (Number.isNaN(paidDate.getTime()) || Number.isNaN(due.getTime())) return { lateFee: 0, daysLate: 0 };
+
+  const grace = Number(gracePeriodDays || 0);
+  const effectiveDue = new Date(due);
+  effectiveDue.setDate(effectiveDue.getDate() + grace);
+  const daysLate = Math.max(0, Math.ceil((paidDate - effectiveDue) / (1000 * 60 * 60 * 24)));
+  if (!daysLate) return { lateFee: 0, daysLate: 0 };
+
+  const rate = Number(penaltyRate || 0) / 100;
+  const flat = Number(penaltyFlat || 0);
+  const base = Number(amount || 0);
+  const lateFee = Math.max(0, base * rate * daysLate + flat);
+  return { lateFee: Number(lateFee.toFixed(2)), daysLate };
+};
+
 const computeBorrowerScore = async (borrowerId) => {
   const borrowerRows = await runQuery(
     'SELECT id, registrationDate, monthlyIncome FROM borrowers WHERE id = ? LIMIT 1',
@@ -238,7 +356,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     const rows = await runQuery(
-      `SELECT u.id, u.name, u.email, u.password, r.name as role
+      `SELECT u.id, u.name, u.email, u.phone, u.address, u.dateOfBirth, u.profileImage, u.password, r.name as role
        FROM users u
        LEFT JOIN user_roles ur ON u.id = ur.userId
        LEFT JOIN roles r ON ur.roleId = r.id
@@ -274,11 +392,20 @@ app.post('/api/login', async (req, res) => {
         ipAddress: ipAddress.toString()
       });
 
-      return res.json({ id: user.id, name: user.name, email: user.email, role: user.role || 'borrower' });
+      return res.json({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || '',
+        address: user.address || '',
+        dateOfBirth: user.dateOfBirth || '',
+        profileImage: user.profileImage || '',
+        role: user.role || 'borrower'
+      });
     }
 
     const borrowerRows = await runQuery(
-      `SELECT id, firstName, lastName, email, password
+      `SELECT id, firstName, lastName, email, password, profileImage
        FROM borrowers
        WHERE email = ?
        LIMIT 1`,
@@ -314,6 +441,7 @@ app.post('/api/login', async (req, res) => {
         id: borrower.id,
         name: `${borrower.firstName} ${borrower.lastName}`,
         email: borrower.email,
+        profileImage: borrower.profileImage || '',
         role: 'borrower'
       });
     }
@@ -343,6 +471,20 @@ app.get('/api/borrowers', async (req, res) => {
   try {
     const rows = await runQuery('SELECT * FROM borrowers ORDER BY registrationDate DESC');
     res.json(rows);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/api/borrowers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rows = await runQuery('SELECT * FROM borrowers WHERE id = ? LIMIT 1', [id]);
+    const borrower = rows[0];
+    if (!borrower) {
+      return res.status(404).send('Borrower not found.');
+    }
+    res.json(borrower);
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -415,9 +557,9 @@ app.post('/api/borrowers', async (req, res) => {
     await runExecute(
       `INSERT INTO borrowers (
         id, firstName, lastName, email, phone, dateOfBirth, address, employment,
-        monthlyIncome, bankName, accountNumber, accountType, routingNumber, facialImage, idImage,
+        monthlyIncome, bankName, accountNumber, accountType, routingNumber, facialImage, idImage, profileImage,
         password, passwordUpdatedAt, creditScore, status, registrationDate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         id,
         payload.firstName,
@@ -434,6 +576,7 @@ app.post('/api/borrowers', async (req, res) => {
         payload.routingNumber || null,
         payload.facialImage || null,
         payload.idImage || null,
+        payload.profileImage || null,
         hashedPassword,
         new Date().toISOString(),
         creditScore,
@@ -459,6 +602,8 @@ app.patch('/api/borrowers/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const payload = req.body;
+    const hasProfileImage = payload.profileImage !== undefined;
+    const profileImageValue = payload.profileImage ?? null;
 
     await runExecute(
       `UPDATE borrowers
@@ -466,6 +611,7 @@ app.patch('/api/borrowers/:id', async (req, res) => {
            lastName = COALESCE(?, lastName),
            email = COALESCE(?, email),
            phone = COALESCE(?, phone),
+           dateOfBirth = COALESCE(?, dateOfBirth),
            address = COALESCE(?, address),
            employment = COALESCE(?, employment),
            monthlyIncome = COALESCE(?, monthlyIncome),
@@ -475,6 +621,7 @@ app.patch('/api/borrowers/:id', async (req, res) => {
            routingNumber = COALESCE(?, routingNumber),
            facialImage = COALESCE(?, facialImage),
            idImage = COALESCE(?, idImage),
+           profileImage = CASE WHEN ? THEN ? ELSE profileImage END,
            status = COALESCE(?, status)
        WHERE id = ?` ,
       [
@@ -482,6 +629,7 @@ app.patch('/api/borrowers/:id', async (req, res) => {
         payload.lastName || null,
         payload.email || null,
         payload.phone || null,
+        payload.dateOfBirth || null,
         payload.address || null,
         payload.employment || null,
         payload.monthlyIncome || null,
@@ -491,6 +639,8 @@ app.patch('/api/borrowers/:id', async (req, res) => {
         payload.routingNumber || null,
         payload.facialImage || null,
         payload.idImage || null,
+        hasProfileImage,
+        profileImageValue,
         payload.status || null,
         id
       ]
@@ -524,34 +674,83 @@ app.post('/api/loan-applications', async (req, res) => {
     const id = payload.id || generateId('LA');
     const applicationDate = payload.applicationDate || new Date().toISOString().split('T')[0];
     const status = payload.status || 'pending';
+    const eligibility = await computeEligibility(payload);
+
+    const columns = [
+      'id',
+      'borrowerId',
+      'borrowerName',
+      'loanType',
+      'requestedAmount',
+      'purpose',
+      'collateralType',
+      'collateralValue',
+      'guarantorName',
+      'guarantorPhone',
+      'status',
+      'applicationDate',
+      'reviewedBy',
+      'reviewDate',
+      'approvedAmount',
+      'interestRate',
+      'termMonths',
+      'creditScore',
+      'eligibilityStatus',
+      'eligibilityScore',
+      'incomeRatio',
+      'debtToIncome',
+      'riskTier',
+      'kycStatus',
+      'documentStatus',
+      'recommendation',
+      'interestType',
+      'gracePeriodDays',
+      'penaltyRate',
+      'penaltyFlat'
+    ];
+
+    const values = [
+      id,
+      payload.borrowerId,
+      payload.borrowerName,
+      payload.loanType,
+      payload.requestedAmount,
+      payload.purpose,
+      payload.collateralType || null,
+      payload.collateralValue || null,
+      payload.guarantorName || null,
+      payload.guarantorPhone || null,
+      status,
+      applicationDate,
+      payload.reviewedBy || null,
+      payload.reviewDate || null,
+      payload.approvedAmount || null,
+      payload.interestRate || null,
+      payload.termMonths || null,
+      payload.creditScore,
+      eligibility?.eligibilityStatus || 'pending',
+      eligibility?.eligibilityScore || null,
+      eligibility?.incomeRatio || null,
+      eligibility?.debtToIncome || null,
+      eligibility?.riskTier || null,
+      eligibility?.kycStatus || 'pending',
+      eligibility?.documentStatus || 'missing',
+      eligibility?.recommendation || null,
+      payload.interestType || 'compound',
+      payload.gracePeriodDays || 5,
+      payload.penaltyRate || 0.5,
+      payload.penaltyFlat || 0
+    ];
+
+    if (columns.length !== values.length) {
+      return res.status(500).send(`Loan application insert mismatch: ${columns.length} columns vs ${values.length} values.`);
+    }
+
+    const placeholders = values.map(() => '?').join(', ');
 
     await runExecute(
-      `INSERT INTO loan_applications (
-        id, borrowerId, borrowerName, loanType, requestedAmount, purpose,
-        collateralType, collateralValue, guarantorName, guarantorPhone, status,
-        applicationDate, reviewedBy, reviewDate, approvedAmount, interestRate,
-        termMonths, creditScore
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
-      [
-        id,
-        payload.borrowerId,
-        payload.borrowerName,
-        payload.loanType,
-        payload.requestedAmount,
-        payload.purpose,
-        payload.collateralType || null,
-        payload.collateralValue || null,
-        payload.guarantorName || null,
-        payload.guarantorPhone || null,
-        status,
-        applicationDate,
-        payload.reviewedBy || null,
-        payload.reviewDate || null,
-        payload.approvedAmount || null,
-        payload.interestRate || null,
-        payload.termMonths || null,
-        payload.creditScore
-      ]
+      `INSERT INTO loan_applications (${columns.join(', ')}) VALUES (${placeholders})` ,
+      values
     );
 
     await logAudit({
@@ -579,7 +778,12 @@ app.patch('/api/loan-applications/:id', async (req, res) => {
            interestRate = COALESCE(?, interestRate),
            termMonths = COALESCE(?, termMonths),
            reviewedBy = COALESCE(?, reviewedBy),
-           reviewDate = COALESCE(?, reviewDate)
+           reviewDate = COALESCE(?, reviewDate),
+           interestType = COALESCE(?, interestType),
+           gracePeriodDays = COALESCE(?, gracePeriodDays),
+           penaltyRate = COALESCE(?, penaltyRate),
+           penaltyFlat = COALESCE(?, penaltyFlat),
+           recommendation = COALESCE(?, recommendation)
        WHERE id = ?` ,
       [
         payload.status || null,
@@ -588,6 +792,11 @@ app.patch('/api/loan-applications/:id', async (req, res) => {
         payload.termMonths || null,
         payload.reviewedBy || null,
         payload.reviewDate || null,
+        payload.interestType || null,
+        payload.gracePeriodDays || null,
+        payload.penaltyRate || null,
+        payload.penaltyFlat || null,
+        payload.recommendation || null,
         id
       ]
     );
@@ -603,6 +812,163 @@ app.patch('/api/loan-applications/:id', async (req, res) => {
     }
 
     res.json({ id });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/api/loan-approvals', async (req, res) => {
+  try {
+    const { applicationId } = req.query || {};
+    const rows = applicationId
+      ? await runQuery('SELECT * FROM loan_application_approvals WHERE applicationId = ? ORDER BY decidedAt DESC', [applicationId])
+      : await runQuery('SELECT * FROM loan_application_approvals ORDER BY decidedAt DESC');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/loan-applications/:id/approvals', async (req, res) => {
+  try {
+    const { id: applicationId } = req.params;
+    const payload = req.body || {};
+    const approvalStage = payload.approvalStage;
+    const decision = payload.decision;
+    if (!approvalStage || !decision) {
+      return res.status(400).send('approvalStage and decision are required.');
+    }
+
+    const approvalId = payload.id || generateId('AP');
+    const decidedAt = new Date().toISOString();
+
+    await runExecute(
+      `INSERT INTO loan_application_approvals (
+        id, applicationId, approvalStage, decision, decidedBy, decidedById, notes, decidedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        decision = VALUES(decision),
+        decidedBy = VALUES(decidedBy),
+        decidedById = VALUES(decidedById),
+        notes = VALUES(notes),
+        decidedAt = VALUES(decidedAt)` ,
+      [
+        approvalId,
+        applicationId,
+        approvalStage,
+        decision,
+        payload.decidedBy || 'System',
+        payload.decidedById || null,
+        payload.notes || null,
+        decidedAt
+      ]
+    );
+
+    const approvals = await runQuery(
+      'SELECT approvalStage, decision FROM loan_application_approvals WHERE applicationId = ?',
+      [applicationId]
+    );
+
+    const requiredStages = ['loan_officer', 'manager'];
+    const decisionMap = approvals.reduce((acc, row) => {
+      acc[row.approvalStage] = row.decision;
+      return acc;
+    }, {});
+
+    let status = 'under_review';
+    if (approvals.some(a => a.decision === 'rejected')) {
+      status = 'rejected';
+    } else if (requiredStages.every(stage => decisionMap[stage] === 'approved')) {
+      status = 'approved';
+    }
+
+    await runExecute(
+      'UPDATE loan_applications SET status = ?, reviewedBy = ?, reviewDate = ? WHERE id = ?',
+      [status, payload.decidedBy || null, new Date().toISOString().split('T')[0], applicationId]
+    );
+
+    await logAudit({
+      action: decision === 'approved' ? 'APPLICATION_STAGE_APPROVED' : 'APPLICATION_STAGE_REJECTED',
+      entity: 'LOAN_APPLICATION',
+      entityId: applicationId,
+      details: `Approval stage ${approvalStage} marked as ${decision}.`
+    });
+
+    res.json({ id: approvalId, status });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const loans = await runQuery('SELECT id, borrowerId, borrowerName, nextDueDate, gracePeriodDays, status FROM loans WHERE status = "active"');
+    const today = new Date();
+
+    for (const loan of loans) {
+      if (!loan.nextDueDate) continue;
+      const dueDate = new Date(loan.nextDueDate);
+      if (Number.isNaN(dueDate.getTime())) continue;
+
+      const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntilDue <= 7 && daysUntilDue >= 0) {
+        const referenceKey = `due-${loan.id}-${loan.nextDueDate}`;
+        const id = generateId('NT');
+        await runExecute(
+          `INSERT IGNORE INTO notifications (
+            id, borrowerId, loanId, type, title, message, severity, status, referenceKey, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+          [
+            id,
+            loan.borrowerId,
+            loan.id,
+            'payment_due',
+            'Upcoming payment due',
+            `Payment due in ${daysUntilDue} day(s) for ${loan.borrowerName}.`,
+            daysUntilDue <= 3 ? 'warning' : 'info',
+            'unread',
+            referenceKey,
+            new Date().toISOString()
+          ]
+        );
+      }
+
+      const { daysLate } = calculateLateFee(new Date().toISOString(), loan.nextDueDate, loan.gracePeriodDays || 0, 0, 0, 0);
+      if (daysLate > 0) {
+        const referenceKey = `overdue-${loan.id}-${loan.nextDueDate}`;
+        const id = generateId('NT');
+        await runExecute(
+          `INSERT IGNORE INTO notifications (
+            id, borrowerId, loanId, type, title, message, severity, status, referenceKey, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+          [
+            id,
+            loan.borrowerId,
+            loan.id,
+            'payment_overdue',
+            'Payment overdue',
+            `Payment is overdue by ${daysLate} day(s) for ${loan.borrowerName}.`,
+            'critical',
+            'unread',
+            referenceKey,
+            new Date().toISOString()
+          ]
+        );
+      }
+    }
+
+    const rows = await runQuery('SELECT * FROM notifications ORDER BY createdAt DESC');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await runExecute('UPDATE notifications SET status = "read" WHERE id = ?', [id]);
+    res.json({ ok: true });
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -632,6 +998,13 @@ app.post('/api/loans', async (req, res) => {
     const payload = req.body;
     const id = payload.id || generateId('LN');
     const status = payload.status || 'active';
+    const interestType = payload.interestType || 'compound';
+    const gracePeriodDays = Number.isFinite(Number(payload.gracePeriodDays)) ? Number(payload.gracePeriodDays) : 5;
+    const penaltyRate = Number.isFinite(Number(payload.penaltyRate)) ? Number(payload.penaltyRate) : 0.5;
+    const penaltyFlat = Number.isFinite(Number(payload.penaltyFlat)) ? Number(payload.penaltyFlat) : 0;
+    const totals = calculateLoanTotals(payload.principalAmount, payload.interestRate, payload.termMonths, interestType);
+    const monthlyPayment = payload.monthlyPayment ?? totals.monthlyPayment;
+    const totalAmount = payload.totalAmount ?? totals.totalAmount;
 
     const connection = await pool.getConnection();
     try {
@@ -642,8 +1015,8 @@ app.post('/api/loans', async (req, res) => {
           id, applicationId, borrowerId, borrowerName, loanType, principalAmount,
           interestRate, termMonths, monthlyPayment, totalAmount, disbursedDate,
           disbursedBy, disbursementMethod, referenceNumber, receiptNumber, disbursementMeta,
-          status, outstandingBalance, nextDueDate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+          status, outstandingBalance, nextDueDate, interestType, gracePeriodDays, penaltyRate, penaltyFlat
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
         [
           id,
           payload.applicationId,
@@ -653,8 +1026,8 @@ app.post('/api/loans', async (req, res) => {
           payload.principalAmount,
           payload.interestRate,
           payload.termMonths,
-          payload.monthlyPayment,
-          payload.totalAmount,
+          monthlyPayment,
+          totalAmount,
           payload.disbursedDate,
           payload.disbursedBy,
           payload.disbursementMethod || null,
@@ -662,8 +1035,12 @@ app.post('/api/loans', async (req, res) => {
           payload.receiptNumber || null,
           payload.disbursementMeta || null,
           status,
-          payload.outstandingBalance,
-          payload.nextDueDate
+          payload.outstandingBalance ?? totalAmount,
+          payload.nextDueDate,
+          interestType,
+          gracePeriodDays,
+          penaltyRate,
+          penaltyFlat
         ]
       );
 
@@ -743,24 +1120,71 @@ app.post('/api/payments', async (req, res) => {
     const id = payload.id || generateId('PM');
     const receiptNumber = payload.receiptNumber || `RC-${Date.now().toString().slice(-6)}`;
 
-    await runExecute(
-      `INSERT INTO payments (
-        id, loanId, borrowerName, amount, paymentDate, dueDate, status, lateFee,
-        receivedBy, receiptNumber
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
-      [
-        id,
-        payload.loanId,
-        payload.borrowerName,
-        payload.amount,
-        payload.paymentDate,
-        payload.dueDate,
-        payload.status,
-        payload.lateFee || null,
-        payload.receivedBy,
-        receiptNumber
-      ]
+    const loanRows = await runQuery(
+      'SELECT id, borrowerId, borrowerName, outstandingBalance, nextDueDate, status, gracePeriodDays, penaltyRate, penaltyFlat FROM loans WHERE id = ? LIMIT 1',
+      [payload.loanId]
     );
+    const loan = loanRows[0];
+    if (!loan) {
+      return res.status(400).send('Loan not found.');
+    }
+
+    const dueDate = payload.dueDate || loan.nextDueDate;
+    const { lateFee, daysLate } = calculateLateFee(
+      payload.paymentDate,
+      dueDate,
+      loan.gracePeriodDays,
+      loan.penaltyRate,
+      loan.penaltyFlat,
+      payload.amount
+    );
+    const status = payload.status || (daysLate > 0 ? 'late' : 'paid');
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      await connection.execute(
+        `INSERT INTO payments (
+          id, loanId, borrowerName, amount, paymentDate, dueDate, status, lateFee,
+          receivedBy, receiptNumber
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        [
+          id,
+          payload.loanId,
+          payload.borrowerName || loan.borrowerName,
+          payload.amount,
+          payload.paymentDate,
+          dueDate,
+          status,
+          lateFee || null,
+          payload.receivedBy,
+          receiptNumber
+        ]
+      );
+
+      const paidAmount = Number(payload.amount || 0);
+      const currentOutstanding = Number(loan.outstandingBalance || 0);
+      const newOutstanding = Math.max(0, currentOutstanding - paidAmount);
+      const newStatus = newOutstanding === 0 ? 'completed' : loan.status;
+      const nextDueDate = newOutstanding === 0 ? loan.nextDueDate : addMonths(dueDate, 1);
+
+      await connection.execute(
+        'UPDATE loans SET outstandingBalance = ?, status = ?, nextDueDate = ? WHERE id = ?',
+        [newOutstanding, newStatus, nextDueDate, loan.id]
+      );
+
+      await connection.commit();
+    } catch (err) {
+      try {
+        await connection.rollback();
+      } catch {
+        // ignore
+      }
+      throw err;
+    } finally {
+      connection.release();
+    }
 
     await logAudit({
       action: 'PAYMENT_RECEIVED',
@@ -770,8 +1194,7 @@ app.post('/api/payments', async (req, res) => {
       details: `Payment received from ${payload.borrowerName} for ${payload.amount}.`
     });
 
-    const loanRows = await runQuery('SELECT borrowerId FROM loans WHERE id = ? LIMIT 1', [payload.loanId]);
-    const borrowerId = loanRows[0]?.borrowerId;
+    const borrowerId = loan.borrowerId;
     if (borrowerId) {
       const scoreResult = await computeBorrowerScore(borrowerId);
       if (scoreResult) {
@@ -780,6 +1203,193 @@ app.post('/api/payments', async (req, res) => {
     }
 
     res.json({ id });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/api/loan-transfers', async (req, res) => {
+  try {
+    const rows = await runQuery('SELECT * FROM loan_transfers ORDER BY createdAt DESC');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/loan-transfers', async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const id = payload.id || generateId('LT');
+    const createdAt = new Date().toISOString();
+    const status = payload.status || 'pending';
+
+    await runExecute(
+      `INSERT INTO loan_transfers (
+        id, loanId, fromBorrowerId, toBorrowerId, reason, status,
+        requestedBy, approvedBy, effectiveDate, createdAt, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      [
+        id,
+        payload.loanId,
+        payload.fromBorrowerId,
+        payload.toBorrowerId,
+        payload.reason,
+        status,
+        payload.requestedBy,
+        payload.approvedBy || null,
+        payload.effectiveDate || null,
+        createdAt,
+        payload.notes || null
+      ]
+    );
+
+    if (status === 'approved') {
+      const borrowerRows = await runQuery('SELECT firstName, lastName FROM borrowers WHERE id = ? LIMIT 1', [payload.toBorrowerId]);
+      const borrowerName = borrowerRows[0] ? `${borrowerRows[0].firstName} ${borrowerRows[0].lastName}` : null;
+      await runExecute('UPDATE loans SET borrowerId = ?, borrowerName = ? WHERE id = ?', [payload.toBorrowerId, borrowerName, payload.loanId]);
+    }
+
+    await logAudit({
+      action: 'LOAN_TRANSFER',
+      entity: 'LOAN',
+      entityId: payload.loanId,
+      details: `Loan transfer ${status} from ${payload.fromBorrowerId} to ${payload.toBorrowerId}.`
+    });
+
+    res.json({ id });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/api/loan-restructures', async (req, res) => {
+  try {
+    const rows = await runQuery('SELECT * FROM loan_restructures ORDER BY createdAt DESC');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/loan-restructures', async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const id = payload.id || generateId('LR');
+    const createdAt = new Date().toISOString();
+    const status = payload.status || 'pending';
+
+    await runExecute(
+      `INSERT INTO loan_restructures (
+        id, loanId, restructureType, newTermMonths, newInterestRate, newMonthlyPayment,
+        reason, status, requestedBy, approvedBy, effectiveDate, createdAt, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      [
+        id,
+        payload.loanId,
+        payload.restructureType,
+        payload.newTermMonths || null,
+        payload.newInterestRate || null,
+        payload.newMonthlyPayment || null,
+        payload.reason,
+        status,
+        payload.requestedBy,
+        payload.approvedBy || null,
+        payload.effectiveDate || null,
+        createdAt,
+        payload.notes || null
+      ]
+    );
+
+    if (status === 'approved') {
+      await runExecute(
+        `UPDATE loans
+         SET termMonths = COALESCE(?, termMonths),
+             interestRate = COALESCE(?, interestRate),
+             monthlyPayment = COALESCE(?, monthlyPayment)
+         WHERE id = ?` ,
+        [
+          payload.newTermMonths || null,
+          payload.newInterestRate || null,
+          payload.newMonthlyPayment || null,
+          payload.loanId
+        ]
+      );
+    }
+
+    await logAudit({
+      action: 'LOAN_RESTRUCTURE',
+      entity: 'LOAN',
+      entityId: payload.loanId,
+      details: `${payload.restructureType || 'restructure'} request ${status} for loan ${payload.loanId}.`
+    });
+
+    res.json({ id });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/api/loan-closures', async (req, res) => {
+  try {
+    const rows = await runQuery('SELECT * FROM loan_closures ORDER BY closedAt DESC');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/loan-closures', async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const id = payload.id || generateId('LC');
+    const closedAt = new Date().toISOString();
+    const certificateNumber = `CC-${Date.now().toString().slice(-8)}`;
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      await connection.execute(
+        `INSERT INTO loan_closures (
+          id, loanId, borrowerId, closedAt, closedBy, certificateNumber, remarks
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)` ,
+        [
+          id,
+          payload.loanId,
+          payload.borrowerId,
+          closedAt,
+          payload.closedBy,
+          certificateNumber,
+          payload.remarks || null
+        ]
+      );
+
+      await connection.execute(
+        'UPDATE loans SET status = ?, outstandingBalance = ?, closureCertificateNumber = ?, closedDate = ? WHERE id = ?',
+        ['completed', 0, certificateNumber, closedAt.split('T')[0], payload.loanId]
+      );
+
+      await connection.commit();
+    } catch (err) {
+      try {
+        await connection.rollback();
+      } catch {
+        // ignore
+      }
+      throw err;
+    } finally {
+      connection.release();
+    }
+
+    await logAudit({
+      action: 'LOAN_CLOSED',
+      entity: 'LOAN',
+      entityId: payload.loanId,
+      details: `Loan closed with certificate ${certificateNumber}.`
+    });
+
+    res.json({ id, certificateNumber });
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -797,7 +1407,7 @@ app.get('/api/audit-logs', async (req, res) => {
 app.get('/api/users', async (req, res) => {
   try {
     const rows = await runQuery(
-      `SELECT u.id, u.name, u.email, u.createdAt, u.status, u.archivedAt, COALESCE(r.name, 'borrower') as role
+      `SELECT u.id, u.name, u.email, u.phone, u.address, u.dateOfBirth, u.profileImage, u.createdAt, u.status, u.archivedAt, COALESCE(r.name, 'borrower') as role
        FROM users u
        LEFT JOIN user_roles ur ON u.id = ur.userId
        LEFT JOIN roles r ON ur.roleId = r.id
@@ -823,12 +1433,16 @@ app.post('/api/users', async (req, res) => {
     const hashedPassword = await hashPassword(payload.password);
 
     await runExecute(
-      `INSERT INTO users (id, name, email, password, createdAt, status, archivedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?)` ,
+      `INSERT INTO users (id, name, email, phone, address, dateOfBirth, profileImage, password, createdAt, status, archivedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         id,
         payload.name,
         payload.email,
+        payload.phone || null,
+        payload.address || null,
+        payload.dateOfBirth || null,
+        payload.profileImage || null,
         hashedPassword,
         createdAt,
         status,
@@ -862,6 +1476,8 @@ app.patch('/api/users/:id', async (req, res) => {
     const payload = req.body;
 
     const hasArchivedAt = payload.archivedAt !== undefined;
+    const hasProfileImage = payload.profileImage !== undefined;
+    const profileImageValue = payload.profileImage ?? null;
 
     let passwordValue = null;
     if (typeof payload.password === 'string' && payload.password.length > 0) {
@@ -876,6 +1492,10 @@ app.patch('/api/users/:id', async (req, res) => {
       `UPDATE users
        SET name = COALESCE(?, name),
            email = COALESCE(?, email),
+           phone = COALESCE(?, phone),
+           address = COALESCE(?, address),
+           dateOfBirth = COALESCE(?, dateOfBirth),
+           profileImage = CASE WHEN ? THEN ? ELSE profileImage END,
            password = COALESCE(?, password),
            status = COALESCE(?, status),
            archivedAt = CASE WHEN ? THEN ? ELSE archivedAt END
@@ -883,6 +1503,11 @@ app.patch('/api/users/:id', async (req, res) => {
       [
         payload.name || null,
         payload.email || null,
+        payload.phone || null,
+        payload.address || null,
+        payload.dateOfBirth || null,
+        hasProfileImage,
+        profileImageValue,
         passwordValue,
         payload.status || null,
         hasArchivedAt,
@@ -930,6 +1555,40 @@ app.post('/api/users/reset-password', async (req, res) => {
     const hashedPassword = await hashPassword(tempPassword);
     await runExecute('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
     res.json({ tempPassword });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/users/change-password', async (req, res) => {
+  try {
+    const { email, currentPassword, newPassword } = req.body || {};
+    if (!email || !currentPassword || !newPassword) {
+      return res.status(400).send('Email, current password, and new password are required.');
+    }
+
+    const policyError = validatePasswordPolicy(newPassword);
+    if (policyError) {
+      return res.status(400).send(policyError);
+    }
+
+    const rows = await runQuery('SELECT id, password FROM users WHERE email = ? LIMIT 1', [email]);
+    const user = rows[0];
+    if (!user || !(await verifyPassword(currentPassword, user.password))) {
+      return res.status(401).send('Invalid credentials.');
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    await runExecute('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
+
+    await logAudit({
+      action: 'USER_PASSWORD_CHANGED',
+      entity: 'USER',
+      entityId: user.id,
+      details: `User ${user.id} changed password.`
+    });
+
+    res.json({ ok: true });
   } catch (error) {
     res.status(500).send(error.message);
   }

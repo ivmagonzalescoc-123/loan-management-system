@@ -1,4 +1,4 @@
-import { Loan, Payment } from './types';
+import { Loan, LoanApproval, LoanClosure, LoanRestructure, LoanTransfer, Notification, Payment } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5174';
 
@@ -41,6 +41,7 @@ export interface CreateBorrowerPayload {
   routingNumber?: string;
   facialImage?: string;
   idImage?: string;
+  profileImage?: string;
   creditScore?: number;
   status?: 'active' | 'inactive' | 'blacklisted';
   registrationDate?: string;
@@ -56,6 +57,7 @@ export interface UpdateBorrowerPayload {
   lastName?: string;
   email?: string;
   phone?: string;
+  dateOfBirth?: string;
   address?: string;
   employment?: string;
   monthlyIncome?: number;
@@ -65,6 +67,7 @@ export interface UpdateBorrowerPayload {
   routingNumber?: string;
   facialImage?: string;
   idImage?: string;
+  profileImage?: string;
   status?: 'active' | 'inactive' | 'blacklisted';
 }
 
@@ -81,6 +84,10 @@ export interface CreateLoanApplicationPayload {
   termMonths?: number;
   interestRate?: number;
   creditScore: number;
+  interestType?: 'simple' | 'compound';
+  gracePeriodDays?: number;
+  penaltyRate?: number;
+  penaltyFlat?: number;
 }
 
 export interface ApproveLoanApplicationPayload {
@@ -90,6 +97,11 @@ export interface ApproveLoanApplicationPayload {
   termMonths?: number;
   reviewedBy?: string;
   reviewDate?: string;
+  interestType?: 'simple' | 'compound';
+  gracePeriodDays?: number;
+  penaltyRate?: number;
+  penaltyFlat?: number;
+  recommendation?: string;
 }
 
 export interface CreateLoanPayload {
@@ -111,6 +123,10 @@ export interface CreateLoanPayload {
   status?: 'active' | 'completed' | 'defaulted' | 'written_off';
   outstandingBalance: number;
   nextDueDate: string;
+  interestType?: 'simple' | 'compound';
+  gracePeriodDays?: number;
+  penaltyRate?: number;
+  penaltyFlat?: number;
 }
 
 export interface CreatePaymentPayload {
@@ -119,10 +135,51 @@ export interface CreatePaymentPayload {
   amount: number;
   paymentDate: string;
   dueDate: string;
-  status: 'paid' | 'late' | 'pending';
+  status?: 'paid' | 'late' | 'pending';
   lateFee?: number;
   receivedBy: string;
   receiptNumber?: string;
+}
+
+export interface CreateLoanApprovalPayload {
+  approvalStage: 'loan_officer' | 'cashier' | 'manager' | 'auditor';
+  decision: 'approved' | 'rejected';
+  decidedBy: string;
+  decidedById?: string;
+  notes?: string;
+}
+
+export interface CreateLoanTransferPayload {
+  loanId: string;
+  fromBorrowerId: string;
+  toBorrowerId: string;
+  reason: string;
+  status?: 'pending' | 'approved' | 'rejected';
+  requestedBy: string;
+  approvedBy?: string;
+  effectiveDate?: string;
+  notes?: string;
+}
+
+export interface CreateLoanRestructurePayload {
+  loanId: string;
+  restructureType: 'restructure' | 'refinance';
+  newTermMonths?: number;
+  newInterestRate?: number;
+  newMonthlyPayment?: number;
+  reason: string;
+  status?: 'pending' | 'approved' | 'rejected';
+  requestedBy: string;
+  approvedBy?: string;
+  effectiveDate?: string;
+  notes?: string;
+}
+
+export interface CreateLoanClosurePayload {
+  loanId: string;
+  borrowerId: string;
+  closedBy: string;
+  remarks?: string;
 }
 
 export interface LoginPayload {
@@ -134,14 +191,22 @@ export interface LoginResponse {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
+  phone?: string;
+  address?: string;
+  dateOfBirth?: string;
+  profileImage?: string;
+  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
 }
 
 export interface CreateUserPayload {
   name: string;
   email: string;
   password: string;
-  role: 'admin' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
+  phone?: string;
+  address?: string;
+  dateOfBirth?: string;
+  profileImage?: string;
+  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
   status?: 'active' | 'inactive' | 'archived';
 }
 
@@ -149,7 +214,11 @@ export interface UpdateUserPayload {
   name?: string;
   email?: string;
   password?: string;
-  role?: 'admin' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
+  phone?: string;
+  address?: string;
+  dateOfBirth?: string;
+  profileImage?: string;
+  role?: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
   status?: 'active' | 'inactive' | 'archived';
   archivedAt?: string | null;
 }
@@ -178,17 +247,44 @@ export const createLoanApplication = (payload: CreateLoanApplicationPayload) =>
 export const updateLoanApplication = (id: string, payload: ApproveLoanApplicationPayload) =>
   apiPatch(`/loan-applications/${id}`, payload);
 
+export const createLoanApproval = (applicationId: string, payload: CreateLoanApprovalPayload) =>
+  apiPost<{ id: string }>(`/loan-applications/${applicationId}/approvals`, payload);
+
+export const getLoanApprovals = (applicationId?: string) =>
+  apiGet<LoanApproval[]>(applicationId ? `/loan-approvals?applicationId=${applicationId}` : '/loan-approvals');
+
 export const createLoan = (payload: CreateLoanPayload) =>
   apiPost<{ id: string }>('/loans', payload);
 
 export const createPayment = (payload: CreatePaymentPayload) =>
   apiPost<{ id: string }>('/payments', payload);
 
+export const getNotifications = () =>
+  apiGet<Notification[]>('/notifications');
+
+export const markNotificationRead = (id: string) =>
+  apiPost<{ ok: true }>(`/notifications/${id}/read`, {});
+
 export const loginUser = (payload: LoginPayload) =>
   apiPost<LoginResponse>('/login', payload);
 
 export const changeBorrowerPassword = (payload: { email: string; currentPassword: string; newPassword: string }) =>
   apiPost<{ ok: true }>('/borrowers/change-password', payload);
+
+export const getBorrowerById = (id: string) =>
+  apiGet<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    dateOfBirth: string;
+    address: string;
+    profileImage?: string;
+  }>(`/borrowers/${id}`);
+
+export const changeUserPassword = (payload: { email: string; currentPassword: string; newPassword: string }) =>
+  apiPost<{ ok: true }>('/users/change-password', payload);
 
 export const getBorrowerLoans = (borrowerId: string) =>
   apiGet<Loan[]>(`/borrowers/${borrowerId}/loans`);
@@ -213,3 +309,21 @@ export const createUser = (payload: CreateUserPayload) =>
 
 export const updateUser = (id: string, payload: UpdateUserPayload) =>
   apiPatch(`/users/${id}`, payload);
+
+export const createLoanTransfer = (payload: CreateLoanTransferPayload) =>
+  apiPost<{ id: string }>('/loan-transfers', payload);
+
+export const createLoanRestructure = (payload: CreateLoanRestructurePayload) =>
+  apiPost<{ id: string }>('/loan-restructures', payload);
+
+export const createLoanClosure = (payload: CreateLoanClosurePayload) =>
+  apiPost<{ id: string; certificateNumber: string }>('/loan-closures', payload);
+
+export const getLoanTransfers = () =>
+  apiGet<LoanTransfer[]>('/loan-transfers');
+
+export const getLoanRestructures = () =>
+  apiGet<LoanRestructure[]>('/loan-restructures');
+
+export const getLoanClosures = () =>
+  apiGet<LoanClosure[]>('/loan-closures');

@@ -23,6 +23,9 @@ export function UserManagement({ user }: UserManagementProps) {
   const [formState, setFormState] = useState({
     name: '',
     email: '',
+    phone: '',
+    address: '',
+    dateOfBirth: '',
     password: '',
     role: 'cashier' as AppUser['role'],
     status: 'active' as NonNullable<AppUser['status']>
@@ -55,7 +58,7 @@ export function UserManagement({ user }: UserManagementProps) {
 
   const openCreate = () => {
     setEditingUser(null);
-    setFormState({ name: '', email: '', password: '', role: 'cashier', status: 'active' });
+    setFormState({ name: '', email: '', phone: '', address: '', dateOfBirth: '', password: '', role: 'cashier', status: 'active' });
     setFormError(null);
     setShowForm(true);
   };
@@ -65,6 +68,9 @@ export function UserManagement({ user }: UserManagementProps) {
     setFormState({
       name: u.name,
       email: u.email,
+      phone: u.phone || '',
+      address: u.address || '',
+      dateOfBirth: u.dateOfBirth || '',
       password: '',
       role: u.role,
       status: (u.status || 'active') as NonNullable<AppUser['status']>
@@ -90,6 +96,9 @@ export function UserManagement({ user }: UserManagementProps) {
         await updateUser(editingUser.id, {
           name: formState.name,
           email: formState.email,
+          phone: formState.phone || undefined,
+          address: formState.address || undefined,
+          dateOfBirth: formState.dateOfBirth || undefined,
           password: formState.password || undefined,
           role: formState.role,
           status: formState.status
@@ -98,6 +107,9 @@ export function UserManagement({ user }: UserManagementProps) {
         await createUser({
           name: formState.name,
           email: formState.email,
+          phone: formState.phone || undefined,
+          address: formState.address || undefined,
+          dateOfBirth: formState.dateOfBirth || undefined,
           password: formState.password,
           role: formState.role,
           status: formState.status
@@ -360,6 +372,35 @@ export function UserManagement({ user }: UserManagementProps) {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-2">Phone</label>
+                  <input
+                    type="text"
+                    value={formState.phone}
+                    onChange={(e) => setFormState(prev => ({ ...prev, phone: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-2">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={formState.dateOfBirth}
+                    onChange={(e) => setFormState(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-2">Address</label>
+                <input
+                  type="text"
+                  value={formState.address}
+                  onChange={(e) => setFormState(prev => ({ ...prev, address: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
               <div>
                 <label className="block text-sm text-gray-700 mb-2">Password</label>
                 <input
@@ -385,6 +426,7 @@ export function UserManagement({ user }: UserManagementProps) {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="admin">Admin</option>
+                    <option value="manager">Manager</option>
                     <option value="loan_officer">Loan Officer</option>
                     <option value="cashier">Cashier</option>
                     <option value="borrower">Borrower</option>

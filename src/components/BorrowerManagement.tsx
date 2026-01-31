@@ -38,7 +38,7 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
     status: 'active'
   });
 
-  const canEditBorrower = user.role === 'admin' || user.role === 'loan_officer';
+  const canEditBorrower = user.role === 'admin' || user.role === 'manager' || user.role === 'loan_officer';
 
   const filteredBorrowers = borrowers.filter(borrower => {
     const matchesSearch = 

@@ -1,22 +1,40 @@
 import { useState } from 'react';
 import { X, CheckCircle, XCircle, Calculator, FileText } from 'lucide-react';
 import { LoanApplication } from '../lib/types';
-import { updateLoanApplication } from '../lib/api';
+import { createLoanApproval, updateLoanApplication } from '../lib/api';
 import { formatPhp } from '../lib/currency';
+import { User } from '../App';
 
 interface ApprovalFormProps {
   application: LoanApplication;
+  user: User;
   onClose: () => void;
   onApprove: () => void;
   onReject: () => void;
 }
 
-export function ApprovalForm({ application, onClose, onApprove, onReject }: ApprovalFormProps) {
+export function ApprovalForm({ application, user, onClose, onApprove, onReject }: ApprovalFormProps) {
+  const roleStageMap: Record<User['role'], 'loan_officer' | 'manager'> = {
+    admin: 'loan_officer',
+    manager: 'manager',
+    loan_officer: 'loan_officer',
+    cashier: 'loan_officer',
+    borrower: 'loan_officer',
+    auditor: 'loan_officer'
+  };
+  const canSelectStage = false;
+  const defaultStage = roleStageMap[user.role] || 'loan_officer';
+
   const [action, setAction] = useState<'approve' | 'reject'>('approve');
+  const [approvalStage, setApprovalStage] = useState<'loan_officer' | 'manager'>(defaultStage);
   const [formData, setFormData] = useState({
     approvedAmount: application.requestedAmount.toString(),
     interestRate: String(application.interestRate ?? 7.5),
     termMonths: String(application.termMonths ?? 36),
+    interestType: (application.interestType ?? 'compound') as 'simple' | 'compound',
+    gracePeriodDays: String(application.gracePeriodDays ?? 5),
+    penaltyRate: String(application.penaltyRate ?? 0.5),
+    penaltyFlat: String(application.penaltyFlat ?? 0),
     processingFee: '500',
     insuranceFee: '200',
     disbursementMethod: 'bank_transfer',
@@ -43,10 +61,20 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
 
   const calculateMonthlyPayment = () => {
     const principal = parseFloat(formData.approvedAmount);
-    const rate = parseFloat(formData.interestRate) / 100 / 12;
     const months = parseInt(formData.termMonths);
-    const payment = (principal * rate * Math.pow(1 + rate, months)) / (Math.pow(1 + rate, months) - 1);
-    return isNaN(payment) ? 0 : payment;
+    if (!principal || !months) return 0;
+
+    if (formData.interestType === 'simple') {
+      const total = principal * (1 + (parseFloat(formData.interestRate) / 100) * (months / 12));
+      const payment = total / months;
+      return Number.isNaN(payment) ? 0 : payment;
+    }
+
+    const rate = parseFloat(formData.interestRate) / 100 / 12;
+    const payment = rate === 0
+      ? principal / months
+      : (principal * rate * Math.pow(1 + rate, months)) / (Math.pow(1 + rate, months) - 1);
+    return Number.isNaN(payment) ? 0 : payment;
   };
 
   const calculateTotalAmount = () => {
@@ -57,15 +85,32 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
 
   const handleSubmit = async () => {
     const reviewDate = new Date().toISOString().split('T')[0];
+    const approvedAmount = parseFloat(formData.approvedAmount);
+    const interestRate = parseFloat(formData.interestRate);
+    const termMonths = parseInt(formData.termMonths, 10);
+    const gracePeriodDays = parseInt(formData.gracePeriodDays, 10);
+    const penaltyRate = parseFloat(formData.penaltyRate);
+    const penaltyFlat = parseFloat(formData.penaltyFlat);
 
     if (action === 'approve') {
       await updateLoanApplication(application.id, {
-        status: 'approved',
-        approvedAmount: parseFloat(formData.approvedAmount),
-        interestRate: parseFloat(formData.interestRate),
-        termMonths: parseInt(formData.termMonths, 10),
-        reviewedBy: 'Loan Officer',
+        status: 'under_review',
+        approvedAmount,
+        interestRate,
+        termMonths,
+        interestType: formData.interestType,
+        gracePeriodDays,
+        penaltyRate,
+        penaltyFlat,
+        reviewedBy: user.name,
         reviewDate
+      });
+      await createLoanApproval(application.id, {
+        approvalStage,
+        decision: 'approved',
+        decidedBy: user.name,
+        decidedById: user.id,
+        notes: formData.specialConditions || formData.internalNotes || undefined
       });
       onApprove();
       return;
@@ -73,8 +118,15 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
 
     await updateLoanApplication(application.id, {
       status: 'rejected',
-      reviewedBy: 'Loan Officer',
+      reviewedBy: user.name,
       reviewDate
+    });
+    await createLoanApproval(application.id, {
+      approvalStage,
+      decision: 'rejected',
+      decidedBy: user.name,
+      decidedById: user.id,
+      notes: `${formData.rejectionCategory}: ${formData.rejectionReason}`.trim()
     });
     onReject();
   };
@@ -131,6 +183,37 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
               <XCircle className="w-5 h-5 inline-block mr-2" />
               Reject Application
             </button>
+          </div>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Approval Stage</label>
+              {canSelectStage ? (
+                <select
+                  value={approvalStage}
+                  onChange={(e) => setApprovalStage(e.target.value as 'loan_officer' | 'manager')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="loan_officer">Loan Officer Review</option>
+                  <option value="manager">Manager Approval</option>
+                </select>
+              ) : (
+                <div className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 bg-gray-50 capitalize">
+                  {approvalStage.replace('_', ' ')}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Reviewer</label>
+              <div className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 bg-gray-50">
+                {user.name} · {user.role.replace('_', ' ')}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Current Status</label>
+              <div className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 bg-gray-50 capitalize">
+                {application.status.replace('_', ' ')}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -240,6 +323,33 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                   <div>
+                    <label className="block text-sm text-gray-700 mb-2">Interest Type *</label>
+                    <select
+                      name="interestType"
+                      value={formData.interestType}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="compound">Compound (Amortized)</option>
+                      <option value="simple">Simple Interest</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-2">Grace Period (days)</label>
+                    <input
+                      type="number"
+                      name="gracePeriodDays"
+                      value={formData.gracePeriodDays}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
                     <label className="block text-sm text-gray-700 mb-2">Processing Fee (₱)</label>
                     <input
                       type="number"
@@ -256,6 +366,31 @@ export function ApprovalForm({ application, onClose, onApprove, onReject }: Appr
                       type="number"
                       name="insuranceFee"
                       value={formData.insuranceFee}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-2">Penalty Rate (% per day)</label>
+                    <input
+                      type="number"
+                      name="penaltyRate"
+                      step="0.1"
+                      value={formData.penaltyRate}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-2">Penalty Flat Fee (₱)</label>
+                    <input
+                      type="number"
+                      name="penaltyFlat"
+                      value={formData.penaltyFlat}
                       onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     />

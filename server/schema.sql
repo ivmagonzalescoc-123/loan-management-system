@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS borrowers (
   routingNumber VARCHAR(50),
   facialImage LONGTEXT,
   idImage LONGTEXT,
+  profileImage LONGTEXT,
   password VARCHAR(255),
   passwordUpdatedAt VARCHAR(30),
   creditScore INT NOT NULL,
@@ -39,7 +40,19 @@ CREATE TABLE IF NOT EXISTS loan_applications (
   approvedAmount DECIMAL(12,2),
   interestRate DECIMAL(6,2),
   termMonths INT,
-  creditScore INT NOT NULL
+  creditScore INT NOT NULL,
+  eligibilityStatus VARCHAR(20),
+  eligibilityScore INT,
+  incomeRatio DECIMAL(6,2),
+  debtToIncome DECIMAL(6,2),
+  riskTier VARCHAR(20),
+  kycStatus VARCHAR(20),
+  documentStatus VARCHAR(20),
+  recommendation TEXT,
+  interestType VARCHAR(20),
+  gracePeriodDays INT,
+  penaltyRate DECIMAL(6,2),
+  penaltyFlat DECIMAL(12,2)
 );
 
 CREATE TABLE IF NOT EXISTS loans (
@@ -61,7 +74,13 @@ CREATE TABLE IF NOT EXISTS loans (
   disbursementMeta LONGTEXT,
   status VARCHAR(20) NOT NULL,
   outstandingBalance DECIMAL(12,2) NOT NULL,
-  nextDueDate VARCHAR(20) NOT NULL
+  nextDueDate VARCHAR(20) NOT NULL,
+  interestType VARCHAR(20),
+  gracePeriodDays INT,
+  penaltyRate DECIMAL(6,2),
+  penaltyFlat DECIMAL(12,2),
+  closureCertificateNumber VARCHAR(50),
+  closedDate VARCHAR(20)
 );
 
 CREATE TABLE IF NOT EXISTS disbursement_receipts (
@@ -107,6 +126,7 @@ CREATE TABLE IF NOT EXISTS roles (
 );
 
 INSERT IGNORE INTO roles (name) VALUES ('admin');
+INSERT IGNORE INTO roles (name) VALUES ('manager');
 INSERT IGNORE INTO roles (name) VALUES ('loan_officer');
 INSERT IGNORE INTO roles (name) VALUES ('cashier');
 INSERT IGNORE INTO roles (name) VALUES ('borrower');
@@ -116,6 +136,10 @@ CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(20) PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
   email VARCHAR(150) NOT NULL UNIQUE,
+  phone VARCHAR(50),
+  address VARCHAR(255),
+  dateOfBirth VARCHAR(20),
+  profileImage LONGTEXT,
   password VARCHAR(255) NOT NULL,
   createdAt VARCHAR(30) NOT NULL,
   status TINYINT(1) NOT NULL DEFAULT 1,
@@ -147,4 +171,70 @@ CREATE TABLE IF NOT EXISTS authorization_codes (
   createdAt VARCHAR(30) NOT NULL,
   expiresAt VARCHAR(30) NOT NULL,
   usedAt VARCHAR(30)
+);
+
+CREATE TABLE IF NOT EXISTS loan_application_approvals (
+  id VARCHAR(20) PRIMARY KEY,
+  applicationId VARCHAR(20) NOT NULL,
+  approvalStage VARCHAR(20) NOT NULL,
+  decision VARCHAR(20) NOT NULL,
+  decidedBy VARCHAR(150) NOT NULL,
+  decidedById VARCHAR(50),
+  notes TEXT,
+  decidedAt VARCHAR(30) NOT NULL,
+  UNIQUE KEY uniq_loan_application_approvals (applicationId, approvalStage)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id VARCHAR(20) PRIMARY KEY,
+  borrowerId VARCHAR(20),
+  loanId VARCHAR(20),
+  type VARCHAR(30) NOT NULL,
+  title VARCHAR(150) NOT NULL,
+  message TEXT NOT NULL,
+  severity VARCHAR(20) NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  referenceKey VARCHAR(100),
+  createdAt VARCHAR(30) NOT NULL,
+  UNIQUE KEY uniq_notifications_referenceKey (referenceKey)
+);
+
+CREATE TABLE IF NOT EXISTS loan_transfers (
+  id VARCHAR(20) PRIMARY KEY,
+  loanId VARCHAR(20) NOT NULL,
+  fromBorrowerId VARCHAR(20) NOT NULL,
+  toBorrowerId VARCHAR(20) NOT NULL,
+  reason TEXT NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  requestedBy VARCHAR(150) NOT NULL,
+  approvedBy VARCHAR(150),
+  effectiveDate VARCHAR(20),
+  createdAt VARCHAR(30) NOT NULL,
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS loan_restructures (
+  id VARCHAR(20) PRIMARY KEY,
+  loanId VARCHAR(20) NOT NULL,
+  restructureType VARCHAR(20) NOT NULL,
+  newTermMonths INT,
+  newInterestRate DECIMAL(6,2),
+  newMonthlyPayment DECIMAL(12,2),
+  reason TEXT NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  requestedBy VARCHAR(150) NOT NULL,
+  approvedBy VARCHAR(150),
+  effectiveDate VARCHAR(20),
+  createdAt VARCHAR(30) NOT NULL,
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS loan_closures (
+  id VARCHAR(20) PRIMARY KEY,
+  loanId VARCHAR(20) NOT NULL,
+  borrowerId VARCHAR(20) NOT NULL,
+  closedAt VARCHAR(30) NOT NULL,
+  closedBy VARCHAR(150) NOT NULL,
+  certificateNumber VARCHAR(50) NOT NULL,
+  remarks TEXT
 );

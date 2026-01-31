@@ -90,7 +90,12 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
     }));
   };
 
-  const calculateMonthlyPayment = (principal: number, rate: number, months: number) => {
+  const calculateMonthlyPayment = (principal: number, rate: number, months: number, interestType: 'simple' | 'compound') => {
+    if (!principal || !months) return 0;
+    if (interestType === 'simple') {
+      const total = principal * (1 + (rate / 100) * (months / 12));
+      return total / months;
+    }
     const monthlyRate = rate / 100 / 12;
     if (monthlyRate === 0) return principal / months;
     return (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) /
@@ -112,7 +117,8 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
       return;
     }
 
-    const monthlyPayment = calculateMonthlyPayment(approvedAmount, interestRate, termMonths);
+    const interestType = application.interestType || 'compound';
+    const monthlyPayment = calculateMonthlyPayment(approvedAmount, interestRate, termMonths, interestType);
     const totalAmount = monthlyPayment * termMonths;
 
     if (!formData.verificationCode) {
@@ -161,7 +167,11 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
         disbursementMeta: JSON.stringify(disbursementMeta),
         status: 'active',
         outstandingBalance: totalAmount,
-        nextDueDate: addMonths(formData.disbursementDate, 1)
+        nextDueDate: addMonths(formData.disbursementDate, 1),
+        interestType,
+        gracePeriodDays: application.gracePeriodDays ?? 5,
+        penaltyRate: application.penaltyRate ?? 0.5,
+        penaltyFlat: application.penaltyFlat ?? 0
       });
 
       // Show receipt preview first (no auto-print). User can print from the modal.
@@ -184,7 +194,11 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
         disbursementMeta: JSON.stringify(disbursementMeta),
         status: 'active',
         outstandingBalance: totalAmount,
-        nextDueDate: addMonths(formData.disbursementDate, 1)
+        nextDueDate: addMonths(formData.disbursementDate, 1),
+        interestType,
+        gracePeriodDays: application.gracePeriodDays ?? 5,
+        penaltyRate: application.penaltyRate ?? 0.5,
+        penaltyFlat: application.penaltyFlat ?? 0
       });
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to disburse loan');

@@ -19,6 +19,24 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
     return Math.min(20, 10 + steps * 2);
   };
 
+  const calculateMonthlyPayment = (principal: number, rate: number, months: number, interestType: 'simple' | 'compound') => {
+    if (!principal || !months) return 0;
+    if (interestType === 'simple') {
+      const total = principal * (1 + (rate / 100) * (months / 12));
+      return total / months;
+    }
+    const monthlyRate = rate / 100 / 12;
+    if (monthlyRate === 0) return principal / months;
+    return (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) /
+      (Math.pow(1 + monthlyRate, months) - 1);
+  };
+
+  const addMonths = (date: string, months: number) => {
+    const d = new Date(date);
+    d.setMonth(d.getMonth() + months);
+    return d.toISOString().split('T')[0];
+  };
+
   const [formData, setFormData] = useState({
     borrowerId: '',
     loanType: 'personal',
@@ -93,7 +111,11 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
         collateralType: formData.hasCollateral ? formData.collateralType : undefined,
         collateralValue: collateralValue && !Number.isNaN(collateralValue) ? collateralValue : undefined,
         guarantorName: formData.hasGuarantor ? formData.guarantorName : undefined,
-        guarantorPhone: formData.hasGuarantor ? formData.guarantorPhone : undefined
+        guarantorPhone: formData.hasGuarantor ? formData.guarantorPhone : undefined,
+        interestType: 'compound',
+        gracePeriodDays: 5,
+        penaltyRate: 0.5,
+        penaltyFlat: 0
       });
       onSubmit();
     } catch (error) {
@@ -108,6 +130,18 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
     const value = suggestedRate + idx * 0.5;
     return Math.round(value * 10) / 10;
   });
+
+  const requestedAmount = parseFloat(formData.requestedAmount || '0');
+  const selectedRate = parseFloat(formData.interestRate || String(suggestedRate));
+  const interestType: 'simple' | 'compound' = 'compound';
+  const monthlyPayment = calculateMonthlyPayment(requestedAmount, selectedRate, selectedTermMonths, interestType);
+  const totalPayment = monthlyPayment * (Number.isFinite(selectedTermMonths) ? selectedTermMonths : 0);
+  const totalInterest = Math.max(0, totalPayment - requestedAmount);
+  const applicationDate = new Date().toISOString().split('T')[0];
+  const estimatedFirstDueDate = selectedTermMonths ? addMonths(applicationDate, 1) : 'N/A';
+  const gracePeriodDays = 5;
+  const penaltyRate = 0.5;
+  const penaltyFlat = 0;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -240,6 +274,39 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">Longer terms have higher rates (max 20%).</p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h5 className="text-sm text-blue-900 mb-3">Estimated Repayment Summary</h5>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <div className="text-xs text-blue-700">Monthly Payment</div>
+                    <div className="text-sm text-blue-900">{formatPhp(Math.round(monthlyPayment))}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-blue-700">Total Payment</div>
+                    <div className="text-sm text-blue-900">{formatPhp(Math.round(totalPayment))}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-blue-700">Total Interest</div>
+                    <div className="text-sm text-blue-900">{formatPhp(Math.round(totalInterest))}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-blue-700">Penalty (Late Fee)</div>
+                    <div className="text-sm text-blue-900">{penaltyRate}%/day + {formatPhp(penaltyFlat)}</div>
+                    <div className="text-xs text-blue-700">Grace: {gracePeriodDays} days</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-blue-700">Start of Payment</div>
+                    <div className="text-sm text-blue-900">{estimatedFirstDueDate}</div>
+                    <div className="text-xs text-blue-700">Estimated first due date</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-blue-700">Interest Type</div>
+                    <div className="text-sm text-blue-900 capitalize">{interestType}</div>
+                    <div className="text-xs text-blue-700">Auto-estimated</div>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -471,7 +538,7 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-900">
-                  By submitting this application, you confirm that all information provided is accurate and complete. The loan will be disbursed to the bank account on file for this borrower.
+                  By submitting this application, you confirm that all information provided is accurate and complete.
                 </p>
               </div>
             </div>

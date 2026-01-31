@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ApprovalForm } from './ApprovalForm';
 import { createAuthorizationCode } from '../lib/api';
 import { formatPhp } from '../lib/currency';
+import { useLoanApprovals } from '../lib/useApiData';
 
 interface ApplicationDetailsModalProps {
   application: LoanApplication;
@@ -18,6 +19,10 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
   const [authCode, setAuthCode] = useState<string | null>(null);
   const [authExpiry, setAuthExpiry] = useState<string | null>(null);
   const canGenerateCode = user.role === 'admin' || user.role === 'loan_officer';
+  const canProcessApplication = user.role === 'admin' || user.role === 'loan_officer' || user.role === 'manager';
+  const { data: approvals } = useLoanApprovals();
+  const applicationApprovals = approvals.filter((approval) => approval.applicationId === application.id);
+  const approvalStages: Array<'loan_officer' | 'manager'> = ['loan_officer', 'manager'];
 
   const handleApprove = () => {
     setShowApprovalForm(true);
@@ -28,7 +33,13 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
   };
 
   const calculateMonthlyPayment = (principal: number, rate: number, months: number) => {
+    if (!principal || !months) return 0;
+    if (application.interestType === 'simple') {
+      const total = principal * (1 + (rate / 100) * (months / 12));
+      return total / months;
+    }
     const monthlyRate = rate / 100 / 12;
+    if (monthlyRate === 0) return principal / months;
     return (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) / 
            (Math.pow(1 + monthlyRate, months) - 1);
   };
@@ -45,6 +56,22 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
     if (score >= 650) return 'Fair';
     if (score >= 600) return 'Poor';
     return 'Very Poor';
+  };
+
+  const getStageStatus = (stage: 'loan_officer' | 'manager') => {
+    const match = applicationApprovals.find(a => a.approvalStage === stage);
+    return match?.decision || 'pending';
+  };
+
+  const getStageLabel = (stage: 'loan_officer' | 'manager') => {
+    switch (stage) {
+      case 'loan_officer':
+        return 'Loan Officer Review';
+      case 'manager':
+        return 'Manager Approval';
+      default:
+        return stage;
+    }
   };
 
   return (
@@ -148,6 +175,47 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
             </div>
           </div>
 
+          {/* Eligibility & Risk */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+            <h4 className="text-sm text-gray-700 mb-4 flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              Eligibility & Risk Assessment
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <div className="text-xs text-gray-500">Eligibility Status</div>
+                <div className="text-sm text-gray-900 capitalize">{application.eligibilityStatus || 'pending'}</div>
+                <div className="text-xs text-gray-500">Score: {application.eligibilityScore ?? 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Risk Tier</div>
+                <div className="text-sm text-gray-900 capitalize">{application.riskTier || 'medium'}</div>
+                <div className="text-xs text-gray-500">DTI: {application.debtToIncome ?? 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Income Ratio</div>
+                <div className="text-sm text-gray-900">{application.incomeRatio ?? 'N/A'}</div>
+                <div className="text-xs text-gray-500">KYC: {application.kycStatus || 'pending'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Document Status</div>
+                <div className="text-sm text-gray-900 capitalize">{application.documentStatus || 'missing'}</div>
+                <div className="text-xs text-gray-500">Interest: {application.interestType || 'compound'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Grace Period</div>
+                <div className="text-sm text-gray-900">{application.gracePeriodDays ?? 5} days</div>
+                <div className="text-xs text-gray-500">Penalty Rate: {application.penaltyRate ?? 0.5}%</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Penalty Flat</div>
+                <div className="text-sm text-gray-900">{formatPhp(application.penaltyFlat ?? 0)}</div>
+                <div className="text-xs text-gray-500">Recommendation</div>
+                <div className="text-xs text-gray-700 mt-1">{application.recommendation || 'Manual review recommended.'}</div>
+              </div>
+            </div>
+          </div>
+
           {/* Loan Purpose */}
           <div>
             <h4 className="text-sm text-gray-600 mb-2">Purpose</h4>
@@ -198,6 +266,38 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
               )}
             </div>
           )}
+
+          {/* Approval Workflow */}
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="p-4 border-b border-gray-200">
+              <h4 className="text-sm text-gray-700">Approval Workflow</h4>
+              <p className="text-xs text-gray-500 mt-1">Multi-role approvals: loan officer → manager</p>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {approvalStages.map((stage) => {
+                const stageStatus = getStageStatus(stage);
+                return (
+                  <div key={stage} className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
+                    <div>
+                      <div className="text-sm text-gray-900">{getStageLabel(stage)}</div>
+                      <div className="text-xs text-gray-500">Status: {stageStatus}</div>
+                    </div>
+                    <span
+                      className={`px-2 py-1 rounded text-xs capitalize ${
+                        stageStatus === 'approved'
+                          ? 'bg-green-100 text-green-700'
+                          : stageStatus === 'rejected'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}
+                    >
+                      {stageStatus}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Approved Terms (if approved) */}
           {application.status === 'approved' && application.approvedAmount && (
@@ -308,7 +408,7 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
             Close
           </button>
           
-          {application.status === 'pending' || application.status === 'under_review' ? (
+          {(application.status === 'pending' || application.status === 'under_review') && canProcessApplication ? (
             <>
               <button
                 onClick={handleApprove}
@@ -325,6 +425,7 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
       {showApprovalForm && (
         <ApprovalForm
           application={application}
+          user={user}
           onClose={() => {
             setShowApprovalForm(false);
             onClose();
