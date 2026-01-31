@@ -333,7 +333,7 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
             </div>
           )}
 
-          {canGenerateCode && (
+          {canGenerateCode && application.status !== 'disbursed' && (
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <div className="flex items-center gap-2 mb-4">
                 <KeyRound className="w-5 h-5 text-blue-600" />

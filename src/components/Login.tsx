@@ -34,7 +34,7 @@ export function Login({ onLogin }: LoginProps) {
           <img src={logoUrl} alt="Loan Management System logo" className="w-10 h-10 object-contain" />
         </div>
         
-        <h2 className="text-center text-gray-900 mb-2">Loan Management System</h2>
+        <h2 className="text-center text-gray-900 mb-2">Gonzales LMS</h2>
 
         <div className="space-y-4 mb-6">
           <div>
@@ -43,7 +43,7 @@ export function Login({ onLogin }: LoginProps) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@lms.com"
+              placeholder="Enter your email"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

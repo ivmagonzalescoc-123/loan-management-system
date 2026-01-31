@@ -887,6 +887,94 @@ app.post('/api/loan-applications/:id/approvals', async (req, res) => {
       [status, payload.decidedBy || null, new Date().toISOString().split('T')[0], applicationId]
     );
 
+    // Notify manager when loan officer approves (for next stage)
+    if (approvalStage === 'loan_officer' && decision === 'approved') {
+      try {
+        const appRows = await runQuery('SELECT borrowerName FROM loan_applications WHERE id = ? LIMIT 1', [applicationId]);
+        const borrowerName = appRows[0] ? appRows[0].borrowerName : '';
+        const referenceKey = `manager-review-${applicationId}`;
+        const nid = generateId('NT');
+        await runExecute(
+          `INSERT IGNORE INTO notifications (
+            id, borrowerId, loanId, type, title, message, severity, status, referenceKey, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+          [
+            nid,
+            null,
+            null,
+            'approval_pending',
+            'Manager Approval Needed',
+            `Application ${applicationId} for ${borrowerName} was approved by loan officer and needs manager review.`,
+            'info',
+            'unread',
+            referenceKey,
+            new Date().toISOString()
+          ]
+        );
+      } catch (err) {
+        console.error('Failed to create manager approval notification', err.message || err);
+      }
+    }
+
+    // Notify loan officer when manager approves (final approval)
+    if (approvalStage === 'manager' && decision === 'approved' && status === 'approved') {
+      try {
+        const appRows = await runQuery('SELECT borrowerName FROM loan_applications WHERE id = ? LIMIT 1', [applicationId]);
+        const borrowerName = appRows[0] ? appRows[0].borrowerName : '';
+        const referenceKey = `officer-notify-approved-${applicationId}`;
+        const nid = generateId('NT');
+        await runExecute(
+          `INSERT IGNORE INTO notifications (
+            id, borrowerId, loanId, type, title, message, severity, status, referenceKey, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+          [
+            nid,
+            null,
+            null,
+            'approval_complete',
+            'Loan Fully Approved',
+            `Application ${applicationId} for ${borrowerName} was fully approved by manager.`,
+            'info',
+            'unread',
+            referenceKey,
+            new Date().toISOString()
+          ]
+        );
+      } catch (err) {
+        console.error('Failed to create loan officer approval notification', err.message || err);
+      }
+    }
+
+    // create a notification for internal users when application becomes fully approved
+    if (status === 'approved') {
+      try {
+        const appRows = await runQuery('SELECT borrowerName FROM loan_applications WHERE id = ? LIMIT 1', [applicationId]);
+        const borrowerName = appRows[0] ? appRows[0].borrowerName : '';
+        const referenceKey = `ready-to-disburse-${applicationId}`;
+        const nid = generateId('NT');
+        await runExecute(
+          `INSERT IGNORE INTO notifications (
+            id, borrowerId, loanId, type, title, message, severity, status, referenceKey, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+          [
+            nid,
+            null,
+            null,
+            'disbursement_ready',
+            'Loan ready for disbursement',
+            `Application ${applicationId} for ${borrowerName} is approved and ready for disbursement.`,
+            'info',
+            'unread',
+            referenceKey,
+            new Date().toISOString()
+          ]
+        );
+      } catch (err) {
+        // don't block approval flow on notification failure
+        console.error('Failed to create disbursement_ready notification', err.message || err);
+      }
+    }
+
     await logAudit({
       action: decision === 'approved' ? 'APPLICATION_STAGE_APPROVED' : 'APPLICATION_STAGE_REJECTED',
       entity: 'LOAN_APPLICATION',
@@ -1093,6 +1181,31 @@ app.post('/api/loans', async (req, res) => {
       userName: payload.disbursedBy,
       details: `Loan disbursed to ${payload.borrowerName} for ${payload.principalAmount}.`
     });
+
+    // create notification so managers / internal users see that a loan was disbursed
+    try {
+      const referenceKey = `disbursed-${id}`;
+      const nid = generateId('NT');
+      await runExecute(
+        `INSERT IGNORE INTO notifications (
+          id, borrowerId, loanId, type, title, message, severity, status, referenceKey, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        [
+          nid,
+          payload.borrowerId || null,
+          id,
+          'disbursed',
+          'Loan Disbursed',
+          `Loan ${id} was disbursed to ${payload.borrowerName} for ${payload.principalAmount}.`,
+          'info',
+          'unread',
+          referenceKey,
+          new Date().toISOString()
+        ]
+      );
+    } catch (err) {
+      console.error('Failed to create disbursed notification', err.message || err);
+    }
 
     const scoreResult = await computeBorrowerScore(payload.borrowerId);
     if (scoreResult) {
