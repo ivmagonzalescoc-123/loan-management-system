@@ -27,6 +27,7 @@ import {
   BarChart3,
   UserCog,
   ListChecks,
+  ClipboardList,
   Receipt,
   Bell,
   Shield,
@@ -263,18 +264,6 @@ export default function App() {
       roles: ["admin", "manager", "loan_officer"],
     },
     {
-      id: "user-management" as View,
-      label: "User Management",
-      icon: UserCog,
-      roles: ["admin"],
-    },
-    {
-      id: "permissions" as View,
-      label: "Permissions",
-      icon: Shield,
-      roles: ["admin"],
-    },
-    {
       id: "applications" as View,
       label: "Loan Applications",
       icon: FileText,
@@ -299,6 +288,18 @@ export default function App() {
       roles: ["admin", "manager"],
     },
     {
+      id: "user-management" as View,
+      label: "User Management",
+      icon: UserCog,
+      roles: ["admin"],
+    },
+    {
+      id: "permissions" as View,
+      label: "Permissions",
+      icon: Shield,
+      roles: ["admin"],
+    },
+    {
       id: "reports" as View,
       label: "Reports",
       icon: BarChart3,
@@ -307,7 +308,7 @@ export default function App() {
     {
       id: "audit-logs" as View,
       label: "Audit Logs",
-      icon: Shield,
+      icon: ClipboardList,
       roles: ["admin"],
     },
     {
@@ -316,7 +317,6 @@ export default function App() {
       icon: Monitor,
       roles: ["admin"],
     },
-
     {
       id: "borrower-loans" as View,
       label: "Loan History",
@@ -358,6 +358,7 @@ export default function App() {
         <nav className="p-4 space-y-1">
           {menuItems.map((item) => {
             const Icon = item.icon;
+            const iconColor = "text-white";
             return (
               <button
                 key={item.id}
@@ -369,7 +370,10 @@ export default function App() {
                   currentView === item.id ? "active" : ""
                 }`}
               >
-                <Icon className="app-nav-icon" />
+                <Icon
+                  className={`app-nav-icon ${iconColor}`}
+                  strokeWidth={1.5}
+                />
                 <span className="app-nav-label">{item.label}</span>
               </button>
             );

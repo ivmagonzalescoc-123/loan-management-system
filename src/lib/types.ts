@@ -71,7 +71,7 @@ export interface Loan {
   referenceNumber?: string | null;
   receiptNumber?: string | null;
   disbursementMeta?: string | null;
-  status: 'active' | 'completed' | 'defaulted' | 'written_off';
+  status: 'active' | 'completed' | 'defaulted' | 'written_off' | 'inactive';
   outstandingBalance: number;
   nextDueDate: string;
   interestType?: 'simple' | 'compound';

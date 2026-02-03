@@ -1858,7 +1858,7 @@ app.post('/api/loan-closures', async (req, res) => {
 
       await connection.execute(
         'UPDATE loans SET status = ?, outstandingBalance = ?, closureCertificateNumber = ?, closedDate = ? WHERE id = ?',
-        ['completed', 0, certificateNumber, closedAt.split('T')[0], payload.loanId]
+        ['inactive', 0, certificateNumber, closedAt.split('T')[0], payload.loanId]
       );
 
       await connection.commit();

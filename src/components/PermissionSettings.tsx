@@ -8,7 +8,6 @@ interface PermissionSettingsProps {
 }
 
 const roles: Array<{ id: UserRole; label: string }> = [
-  { id: 'admin', label: 'Admin' },
   { id: 'manager', label: 'Manager' },
   { id: 'loan_officer', label: 'Loan Officer' },
   { id: 'cashier', label: 'Cashier' },

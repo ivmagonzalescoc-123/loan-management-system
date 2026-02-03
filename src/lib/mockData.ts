@@ -48,7 +48,7 @@ export interface Loan {
   totalAmount: number;
   disbursedDate: string;
   disbursedBy: string;
-  status: 'active' | 'completed' | 'defaulted' | 'written_off';
+  status: 'active' | 'completed' | 'defaulted' | 'written_off' | 'inactive';
   outstandingBalance: number;
   nextDueDate: string;
 }

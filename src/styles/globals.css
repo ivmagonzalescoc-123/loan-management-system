@@ -361,25 +361,20 @@ html {
   width: 18px;
   height: 18px;
   opacity: 0.95;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.app-sidebar .app-nav-btn .app-nav-icon {
+  fill: none !important;
 }
 
 .app-sidebar .app-nav-btn:hover .app-nav-icon {
-  color: #ffffff !important;
-  stroke: #ffffff !important;
   filter: none;
 }
 
 .app-sidebar .app-nav-btn.active .app-nav-icon {
-  color: #ffffff !important;
-  stroke: #ffffff !important;
   filter: none;
-}
-
-.app-sidebar svg,
-.app-sidebar .icon {
-  color: #ffffff !important;
-  stroke: #ffffff !important;
-  fill: #ffffff !important;
 }
 
 .app-header .profile-action, .app-header .notifications-action {

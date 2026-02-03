@@ -168,6 +168,7 @@ export function Disbursements({ user }: DisbursementsProps) {
                       loan.status === 'active' ? 'bg-green-100 text-green-700' :
                       loan.status === 'completed' ? 'bg-blue-100 text-blue-700' :
                       loan.status === 'defaulted' ? 'bg-red-100 text-red-700' :
+                      loan.status === 'inactive' ? 'bg-gray-200 text-gray-800' :
                       'bg-gray-100 text-gray-700'
                     }`}>
                       {loan.status}
