@@ -212,6 +212,18 @@ export interface AuditLog {
   ipAddress: string;
 }
 
+export interface SystemLog {
+  id: string;
+  userId?: string | null;
+  email: string;
+  name: string;
+  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'unknown';
+  ipAddress: string;
+  userAgent: string;
+  status: 'success' | 'failed';
+  createdAt: string;
+}
+
 export interface AppUser {
   id: string;
   name: string;

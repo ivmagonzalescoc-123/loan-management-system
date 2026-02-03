@@ -214,7 +214,7 @@ export function UserProfile({ user, initialTab = 'details', onProfileUpdated }: 
             )}
             <button
               onClick={handleSaveProfile}
-              className="w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition-colors"
+              className="w-full bg-gray-900 text-green py-2 rounded-lg hover:bg-gray-800 transition-colors"
             >
               Save Profile
             </button>

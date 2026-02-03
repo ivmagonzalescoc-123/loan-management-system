@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet } from './api';
-import { AppUser, AuditLog, Borrower, Loan, LoanApplication, LoanApproval, LoanClosure, LoanRestructure, LoanTransfer, Notification, Payment } from './types';
+import { AppUser, AuditLog, Borrower, Loan, LoanApplication, LoanApproval, LoanClosure, LoanRestructure, LoanTransfer, Notification, Payment, SystemLog } from './types';
 
 interface ApiState<T> {
   data: T[];
@@ -39,6 +39,7 @@ export const useLoanApplications = () => useApiList<LoanApplication>('/loan-appl
 export const useLoans = () => useApiList<Loan>('/loans');
 export const usePayments = () => useApiList<Payment>('/payments');
 export const useAuditLogs = () => useApiList<AuditLog>('/audit-logs');
+export const useSystemLogs = () => useApiList<SystemLog>('/system-logs');
 export const useUsers = () => useApiList<AppUser>('/users');
 export const useLoanApprovals = () => useApiList<LoanApproval>('/loan-approvals');
 export const useNotifications = () => useApiList<Notification>('/notifications');

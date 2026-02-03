@@ -1895,6 +1895,40 @@ app.get('/api/audit-logs', async (req, res) => {
   }
 });
 
+app.get('/api/system-logs', async (req, res) => {
+  try {
+    const rows = await runQuery(
+      `SELECT
+         l.id,
+         l.userId,
+         l.email,
+         l.status,
+         l.ipAddress,
+         l.userAgent,
+         l.createdAt,
+         COALESCE(u.name, CONCAT(b.firstName, ' ', b.lastName), l.email) AS name,
+         CASE
+           WHEN b.id IS NOT NULL THEN 'borrower'
+           WHEN roles.role IS NOT NULL THEN roles.role
+           ELSE 'unknown'
+         END AS role
+       FROM login_logs l
+       LEFT JOIN users u ON l.userId = u.id
+       LEFT JOIN (
+         SELECT ur.userId, MIN(r.name) AS role
+         FROM user_roles ur
+         JOIN roles r ON r.id = ur.roleId
+         GROUP BY ur.userId
+       ) roles ON roles.userId = u.id
+       LEFT JOIN borrowers b ON l.userId = b.id
+       ORDER BY l.createdAt DESC`
+    );
+    res.json(rows);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
 app.get('/api/users', async (req, res) => {
   try {
     const rows = await runQuery(

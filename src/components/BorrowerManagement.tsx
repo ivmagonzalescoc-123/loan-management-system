@@ -241,7 +241,7 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
             active: loans.filter(loan => loan.borrowerId === selectedBorrower.id && loan.status === 'active').length,
             totalBorrowed: loans
               .filter(loan => loan.borrowerId === selectedBorrower.id)
-              .reduce((sum, loan) => sum + loan.principalAmount, 0)
+              .reduce((sum, loan) => sum + Number(loan.principalAmount || 0), 0)
           }}
           onClose={() => setShowDetails(false)}
         />

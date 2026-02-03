@@ -263,7 +263,7 @@ export function BorrowerProfile({ user, initialTab = 'details', onProfileUpdated
                 )}
                 <button
                   onClick={handleSaveDetails}
-                  className="w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition-colors"
+                  className="w-full bg-gray-900 text-green py-2 rounded-lg hover:bg-gray-800 transition-colors"
                 >
                   Save Details
                 </button>

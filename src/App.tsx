@@ -13,6 +13,7 @@ import { BorrowerLoanHistory } from "./components/BorrowerLoanHistory";
 import { BorrowerPaymentHistory } from "./components/BorrowerPaymentHistory";
 import { NotificationsCenter } from "./components/NotificationsCenter";
 import { AuditLogs } from "./components/AuditLogs";
+import { SystemLogs } from "./components/SystemLogs";
 import logoUrl from "../logo.png";
 import {
   LayoutDashboard,
@@ -26,6 +27,7 @@ import {
   Receipt,
   Bell,
   Shield,
+  Monitor,
   User as UserIcon,
 } from "lucide-react";
 import { markNotificationRead } from "./lib/api";
@@ -60,6 +62,7 @@ type View =
   | "profile"
   | "notifications"
   | "audit-logs"
+  | "system-logs"
   | "borrower-loans"
   | "borrower-payments";
 
@@ -212,6 +215,18 @@ export default function App() {
       label: "Reports",
       icon: BarChart3,
       roles: ["admin", "manager", "loan_officer"],
+    },
+    {
+      id: "audit-logs" as View,
+      label: "Audit Logs",
+      icon: Shield,
+      roles: ["admin"],
+    },
+    {
+      id: "system-logs" as View,
+      label: "System Logs",
+      icon: Monitor,
+      roles: ["admin"],
     },
 
     {
@@ -427,6 +442,9 @@ export default function App() {
           )}
           {currentView === "audit-logs" && (
             <AuditLogs />
+          )}
+          {currentView === "system-logs" && (
+            <SystemLogs />
           )}
           {currentView === "notifications" && (
             <NotificationsCenter user={currentUser} />

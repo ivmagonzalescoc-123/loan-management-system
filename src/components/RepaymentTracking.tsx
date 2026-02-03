@@ -259,7 +259,7 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
                           <Plus className="w-3 h-3" />
                           Payment
                         </button>
-                        {(user.role === 'admin' || user.role === 'manager' || user.role === 'loan_officer' || user.role === 'cashier') && (
+                        {(user.role === 'admin' || user.role === 'manager' || user.role === 'loan_officer') && (
                           <button
                             onClick={() => handleLoanActions(loan.id)}
                             className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200 transition-colors"
