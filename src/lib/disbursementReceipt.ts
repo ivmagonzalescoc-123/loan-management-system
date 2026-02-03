@@ -85,8 +85,12 @@ export const buildDisbursementReceiptHtml = (
   const now = new Date();
   const printedAt = now.toLocaleString();
 
-  const methodLabel = (meta.disbursementMethod || '').replace(/_/g, ' ').toUpperCase();
+  const methodValue = (meta.disbursementMethod || '').toLowerCase();
+  const methodLabel = methodValue.replace(/_/g, ' ').toUpperCase();
   const amount = formatPhp(data.principalAmount);
+  const isBankTransfer = methodValue === 'bank_transfer';
+  const isCheck = methodValue === 'check';
+  const isDigitalWallet = methodValue === 'digital_wallet';
 
   const rows: Array<{ label: string; value: string }> = [
     { label: 'Receipt No.', value: escapeHtml(data.receiptNumber || '-') },
@@ -105,18 +109,14 @@ export const buildDisbursementReceiptHtml = (
     { label: 'Total Payable', value: escapeHtml(formatPhp(data.totalAmount)) }
   ];
 
-  if (meta.bankName || meta.accountNumberLast4) {
-    rows.push({ label: 'Bank', value: escapeHtml(meta.bankName || '-') });
-    rows.push({ label: 'Account', value: escapeHtml(meta.accountNumberLast4 ? `***${meta.accountNumberLast4}` : '-') });
-  }
+  rows.push({ label: 'Bank', value: escapeHtml(isBankTransfer ? (meta.bankName || '-') : '-') });
+  rows.push({ label: 'Account', value: escapeHtml(isBankTransfer && meta.accountNumberLast4 ? `***${meta.accountNumberLast4}` : '-') });
 
-  if (meta.checkNumber) rows.push({ label: 'Check No.', value: escapeHtml(meta.checkNumber) });
-  if (meta.checkDate) rows.push({ label: 'Check Date', value: escapeHtml(meta.checkDate) });
+  rows.push({ label: 'Check No.', value: escapeHtml(isCheck ? (meta.checkNumber || '-') : '-') });
+  rows.push({ label: 'Check Date', value: escapeHtml(isCheck ? (meta.checkDate || '-') : '-') });
 
-  if (meta.digitalWalletProvider || meta.walletId) {
-    rows.push({ label: 'Wallet Provider', value: escapeHtml(meta.digitalWalletProvider || '-') });
-    rows.push({ label: 'Wallet ID', value: escapeHtml(meta.walletId || '-') });
-  }
+  rows.push({ label: 'Wallet Provider', value: escapeHtml(isDigitalWallet ? (meta.digitalWalletProvider || '-') : '-') });
+  rows.push({ label: 'Wallet ID', value: escapeHtml(isDigitalWallet ? (meta.walletId || '-') : '-') });
 
   if (meta.notes) rows.push({ label: 'Notes', value: escapeHtml(meta.notes) });
 

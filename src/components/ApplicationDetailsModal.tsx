@@ -1,9 +1,8 @@
-import { X, CheckCircle, XCircle, User, PhilippinePeso, Calendar, FileText, Shield, KeyRound } from 'lucide-react';
+import { X, CheckCircle, XCircle, User, PhilippinePeso, Calendar, FileText, Shield } from 'lucide-react';
 import { LoanApplication } from '../lib/types';
 import { User as AppUser } from '../App';
 import { useState } from 'react';
 import { ApprovalForm } from './ApprovalForm';
-import { createAuthorizationCode } from '../lib/api';
 import { formatPhp } from '../lib/currency';
 import { useLoanApprovals } from '../lib/useApiData';
 
@@ -16,9 +15,6 @@ interface ApplicationDetailsModalProps {
 
 export function ApplicationDetailsModal({ application, user, onClose, onUpdated }: ApplicationDetailsModalProps) {
   const [showApprovalForm, setShowApprovalForm] = useState(false);
-  const [authCode, setAuthCode] = useState<string | null>(null);
-  const [authExpiry, setAuthExpiry] = useState<string | null>(null);
-  const canGenerateCode = user.role === 'admin' || user.role === 'loan_officer';
   const canProcessApplication = user.role === 'admin' || user.role === 'loan_officer' || user.role === 'manager';
   const { data: approvals } = useLoanApprovals();
   const applicationApprovals = approvals.filter((approval) => approval.applicationId === application.id);
@@ -143,9 +139,14 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Credit Score</div>
-                  <div className={`text-lg ${getCreditScoreColor(application.creditScore)}`}>
-                    {application.creditScore} - {getCreditScoreLabel(application.creditScore)}
-                  </div>
+                  {(() => {
+                    const score = application.currentCreditScore ?? application.creditScore;
+                    return (
+                      <div className={`text-lg ${getCreditScoreColor(score)}`}>
+                        {score} - {getCreditScoreLabel(score)}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -330,44 +331,6 @@ export function ApplicationDetailsModal({ application, user, onClose, onUpdated 
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {canGenerateCode && (
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <KeyRound className="w-5 h-5 text-blue-600" />
-                <h4 className="text-sm text-gray-900">Disbursement Authorization Code</h4>
-              </div>
-              <p className="text-xs text-gray-600 mb-4">
-                Generate a code for the cashier to complete disbursement.
-              </p>
-              {authCode ? (
-                <div className="space-y-3">
-                  <div className="text-sm text-gray-700">Authorization Code</div>
-                  <div className="text-lg font-semibold text-gray-900 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                    {authCode}
-                  </div>
-                  {authExpiry && (
-                    <div className="text-xs text-gray-500">Expires: {new Date(authExpiry).toLocaleString()}</div>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={async () => {
-                    const result = await createAuthorizationCode({
-                      applicationId: application.id,
-                      createdBy: user.id,
-                      createdRole: user.role
-                    });
-                    setAuthCode(result.code);
-                    setAuthExpiry(result.expiresAt);
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Generate Code
-                </button>
-              )}
             </div>
           )}
 

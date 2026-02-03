@@ -221,6 +221,149 @@ const calculateLateFee = (paymentDate, dueDate, gracePeriodDays, penaltyRate, pe
   return { lateFee: Number(lateFee.toFixed(2)), daysLate };
 };
 
+const runDelinquencyProcessing = async () => {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  const loans = await runQuery(
+    'SELECT id, borrowerId, borrowerName, outstandingBalance, nextDueDate, status, gracePeriodDays, penaltyRate, penaltyFlat FROM loans WHERE status = "active"'
+  );
+  if (!loans.length) return;
+
+  const lastPayments = await runQuery(
+    'SELECT loanId, MAX(paymentDate) as lastPaymentDate FROM payments GROUP BY loanId'
+  );
+  const lastPaymentMap = new Map(lastPayments.map((row) => [row.loanId, row.lastPaymentDate]));
+
+  for (const loan of loans) {
+    if (!loan.nextDueDate) continue;
+    const { daysLate } = calculateLateFee(
+      todayStr,
+      loan.nextDueDate,
+      loan.gracePeriodDays || 0,
+      loan.penaltyRate || 0,
+      loan.penaltyFlat || 0,
+      loan.outstandingBalance || 0
+    );
+    if (daysLate <= 0) continue;
+
+    const penaltyDate = todayStr;
+    const existingPenalty = await runQuery(
+      'SELECT COUNT(*) as count FROM loan_penalties WHERE loanId = ?',
+      [loan.id]
+    );
+    const penaltyCount = Number(existingPenalty[0]?.count || 0);
+
+    const rate = Number(loan.penaltyRate || 0) / 100;
+    const flat = Number(loan.penaltyFlat || 0);
+    const base = Number(loan.outstandingBalance || 0);
+    let penaltyAmount = 0;
+    if (rate > 0 && base > 0) {
+      penaltyAmount += base * rate;
+    }
+    if (penaltyCount === 0 && flat > 0) {
+      penaltyAmount += flat;
+    }
+    penaltyAmount = Number(penaltyAmount.toFixed(2));
+
+    if (penaltyAmount > 0) {
+      const insertPenalty = await runExecute(
+        `INSERT IGNORE INTO loan_penalties (id, loanId, penaltyDate, daysLate, amount, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?)` ,
+        [generateId('PN'), loan.id, penaltyDate, daysLate, penaltyAmount, new Date().toISOString()]
+      );
+
+      if (insertPenalty?.affectedRows) {
+        await runExecute(
+          'UPDATE loans SET outstandingBalance = outstandingBalance + ? WHERE id = ?',
+          [penaltyAmount, loan.id]
+        );
+      }
+    }
+
+    const lastPaymentDate = lastPaymentMap.get(loan.id) || null;
+    const delinquencyThresholds = [60, 90, 180];
+    for (const threshold of delinquencyThresholds) {
+      if (daysLate < threshold) continue;
+      const referenceKey = `loan-${loan.id}-delinquent-${threshold}`;
+      const severity = threshold >= 180 ? 'critical' : 'warning';
+      const message = threshold === 60
+        ? 'Your account is considered severely delinquent after missing two billing cycles.'
+        : threshold === 90
+        ? 'Collections activity intensifies after three missed billing cycles.'
+        : 'Your account is being forwarded to collections due to extended delinquency.';
+
+      await createNotification({
+        borrowerId: loan.borrowerId,
+        loanId: loan.id,
+        targetRole: 'borrower',
+        type: 'payment_overdue',
+        title: `${threshold} Days Delinquent`,
+        message,
+        severity,
+        referenceKey: `${referenceKey}-borrower`
+      });
+
+      await createNotification({
+        targetRole: 'manager',
+        loanId: loan.id,
+        type: 'payment_overdue',
+        title: `${threshold} Days Delinquent`,
+        message: `${loan.borrowerName} is ${threshold} days delinquent.`,
+        severity,
+        referenceKey: `${referenceKey}-manager`
+      });
+
+      await createNotification({
+        targetRole: 'admin',
+        loanId: loan.id,
+        type: 'payment_overdue',
+        title: `${threshold} Days Delinquent`,
+        message: `${loan.borrowerName} is ${threshold} days delinquent.`,
+        severity,
+        referenceKey: `${referenceKey}-admin`
+      });
+
+      await createNotification({
+        targetRole: 'auditor',
+        loanId: loan.id,
+        type: 'payment_overdue',
+        title: `${threshold} Days Delinquent`,
+        message: `${loan.borrowerName} is ${threshold} days delinquent.`,
+        severity,
+        referenceKey: `${referenceKey}-auditor`
+      });
+    }
+
+    if (daysLate >= 180) {
+      await runExecute(
+        `INSERT IGNORE INTO collections (id, loanId, borrowerId, borrowerName, status, reason, daysDelinquent, createdAt, forwardedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        [
+          generateId('CL'),
+          loan.id,
+          loan.borrowerId,
+          loan.borrowerName,
+          'pending',
+          '180+ days delinquent without payment',
+          daysLate,
+          new Date().toISOString(),
+          new Date().toISOString()
+        ]
+      );
+
+      await runExecute('UPDATE loans SET status = ? WHERE id = ?', ['defaulted', loan.id]);
+
+      await logAudit({
+        action: 'COLLECTIONS_FORWARDED',
+        entity: 'LOAN',
+        entityId: loan.id,
+        details: `Loan forwarded to collections after ${daysLate} days delinquent. Last payment: ${lastPaymentDate || 'none'}.`
+      });
+    }
+  }
+};
+
 const computeBorrowerScore = async (borrowerId) => {
   const borrowerRows = await runQuery(
     'SELECT id, registrationDate, monthlyIncome FROM borrowers WHERE id = ? LIMIT 1',
@@ -341,6 +484,61 @@ const logAudit = async ({ userId, userName, action, entity, entityId, details, i
     );
   } catch {
     // swallow audit errors
+  }
+};
+
+const createNotification = async ({
+  borrowerId = null,
+  loanId = null,
+  actorName = null,
+  actorProfileImage = null,
+  targetRole = null,
+  type,
+  title,
+  message,
+  severity = 'info',
+  status = 'unread',
+  referenceKey = null
+}) => {
+  try {
+    const id = generateId('NT');
+    const createdAt = new Date().toISOString();
+    const ref = referenceKey || id;
+    await runExecute(
+      `INSERT IGNORE INTO notifications (
+        id, borrowerId, loanId, actorName, actorProfileImage, targetRole, type, title, message, severity, status, referenceKey, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      [
+        id,
+        borrowerId,
+        loanId,
+        actorName,
+        actorProfileImage,
+        targetRole,
+        type,
+        title,
+        message,
+        severity,
+        status,
+        ref,
+        createdAt
+      ]
+    );
+  } catch {
+    // swallow notification errors
+  }
+};
+
+const getUserProfileByName = async (name) => {
+  if (!name) return null;
+  try {
+    const rows = await runQuery(
+      'SELECT name, profileImage FROM users WHERE name = ? LIMIT 1',
+      [name]
+    );
+    return rows[0] || null;
+  } catch {
+    return null;
   }
 };
 
@@ -661,7 +859,12 @@ app.patch('/api/borrowers/:id', async (req, res) => {
 
 app.get('/api/loan-applications', async (req, res) => {
   try {
-    const rows = await runQuery('SELECT * FROM loan_applications ORDER BY applicationDate DESC');
+    const rows = await runQuery(
+      `SELECT la.*, b.creditScore AS currentCreditScore
+       FROM loan_applications la
+       LEFT JOIN borrowers b ON la.borrowerId = b.id
+       ORDER BY la.applicationDate DESC`
+    );
     res.json(rows);
   } catch (error) {
     res.status(500).send(error.message);
@@ -760,6 +963,43 @@ app.post('/api/loan-applications', async (req, res) => {
       details: `Loan application created for ${payload.borrowerName}.`
     });
 
+    await createNotification({
+      borrowerId: payload.borrowerId,
+      targetRole: 'borrower',
+      type: 'approval_pending',
+      title: 'Application submitted',
+      message: `Your ${payload.loanType} loan application has been submitted for review.`,
+      severity: 'info',
+      referenceKey: `app-${id}-borrower-submitted`
+    });
+
+    await createNotification({
+      targetRole: 'loan_officer',
+      type: 'approval_requested',
+      title: 'New loan application',
+      message: `${payload.borrowerName} submitted a ${payload.loanType} loan application.`,
+      severity: 'info',
+      referenceKey: `app-${id}-loan-officer-review`
+    });
+
+    await createNotification({
+      targetRole: 'manager',
+      type: 'approval_requested',
+      title: 'New loan application',
+      message: `${payload.borrowerName} submitted a ${payload.loanType} loan application.`,
+      severity: 'info',
+      referenceKey: `app-${id}-manager-review`
+    });
+
+    await createNotification({
+      targetRole: 'admin',
+      type: 'approval_requested',
+      title: 'New loan application',
+      message: `${payload.borrowerName} submitted a ${payload.loanType} loan application.`,
+      severity: 'info',
+      referenceKey: `app-${id}-admin-review`
+    });
+
     res.json({ id });
   } catch (error) {
     res.status(500).send(error.message);
@@ -770,6 +1010,12 @@ app.patch('/api/loan-applications/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const payload = req.body;
+
+    const applicationRows = await runQuery(
+      'SELECT borrowerId, borrowerName, loanType FROM loan_applications WHERE id = ? LIMIT 1',
+      [id]
+    );
+    const application = applicationRows[0];
 
     await runExecute(
       `UPDATE loan_applications
@@ -809,6 +1055,77 @@ app.patch('/api/loan-applications/:id', async (req, res) => {
         entityId: id,
         details: `Application ${id} status changed to ${payload.status}.`
       });
+
+      if (application?.borrowerId) {
+        if (payload.status === 'approved') {
+          await createNotification({
+            borrowerId: application.borrowerId,
+            targetRole: 'borrower',
+            type: 'loan_approved',
+            title: 'Loan approved',
+            message: `Your ${application.loanType} loan application has been approved.`,
+            severity: 'info',
+            referenceKey: `app-${id}-borrower-approved`
+          });
+
+          await createNotification({
+            targetRole: 'loan_officer',
+            type: 'approval_completed',
+            title: 'Loan approved',
+            message: `${application.borrowerName} was approved for ${application.loanType}.`,
+            severity: 'info',
+            referenceKey: `app-${id}-loanofficer-approved`
+          });
+
+          await createNotification({
+            targetRole: 'manager',
+            type: 'approval_completed',
+            title: 'Loan approved',
+            message: `${application.borrowerName} was approved for ${application.loanType}.`,
+            severity: 'info',
+            referenceKey: `app-${id}-manager-approved`
+          });
+
+          await createNotification({
+            targetRole: 'cashier',
+            type: 'approval_completed',
+            title: 'Loan approved for disbursement',
+            message: `${application.borrowerName} is ready for disbursement processing.`,
+            severity: 'info',
+            referenceKey: `app-${id}-cashier-disburse-ready`
+          });
+
+          await createNotification({
+            targetRole: 'admin',
+            type: 'approval_completed',
+            title: 'Loan approved',
+            message: `${application.borrowerName} was approved for ${application.loanType}.`,
+            severity: 'info',
+            referenceKey: `app-${id}-admin-approved`
+          });
+
+          await createNotification({
+            targetRole: 'auditor',
+            type: 'approval_completed',
+            title: 'Loan approved',
+            message: `${application.borrowerName} was approved for ${application.loanType}.`,
+            severity: 'info',
+            referenceKey: `app-${id}-auditor-approved`
+          });
+        }
+
+        if (payload.status === 'rejected') {
+          await createNotification({
+            borrowerId: application.borrowerId,
+            targetRole: 'borrower',
+            type: 'loan_rejected',
+            title: 'Loan application rejected',
+            message: `Your ${application.loanType} loan application was not approved.`,
+            severity: 'warning',
+            referenceKey: `app-${id}-borrower-rejected`
+          });
+        }
+      }
     }
 
     res.json({ id });
@@ -842,6 +1159,12 @@ app.post('/api/loan-applications/:id/approvals', async (req, res) => {
     const approvalId = payload.id || generateId('AP');
     const decidedAt = new Date().toISOString();
 
+    const applicationRows = await runQuery(
+      'SELECT borrowerId, borrowerName, loanType, requestedAmount FROM loan_applications WHERE id = ? LIMIT 1',
+      [applicationId]
+    );
+    const application = applicationRows[0];
+
     await runExecute(
       `INSERT INTO loan_application_approvals (
         id, applicationId, approvalStage, decision, decidedBy, decidedById, notes, decidedAt
@@ -869,6 +1192,8 @@ app.post('/api/loan-applications/:id/approvals', async (req, res) => {
       [applicationId]
     );
 
+    const actorProfile = await getUserProfileByName(payload.decidedBy);
+
     const requiredStages = ['loan_officer', 'manager'];
     const decisionMap = approvals.reduce((acc, row) => {
       acc[row.approvalStage] = row.decision;
@@ -894,6 +1219,126 @@ app.post('/api/loan-applications/:id/approvals', async (req, res) => {
       details: `Approval stage ${approvalStage} marked as ${decision}.`
     });
 
+    if (application) {
+      if (decision === 'approved' && approvalStage === 'loan_officer') {
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          targetRole: 'manager',
+          type: 'approval_requested',
+          title: 'Manager approval required',
+          message: `${application.borrowerName} (${application.loanType}) is ready for manager review.`,
+          severity: 'info',
+          referenceKey: `app-${applicationId}-manager-approval`
+        });
+      }
+
+      if (decision === 'approved' && approvalStage === 'manager' && status === 'approved') {
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          targetRole: 'cashier',
+          type: 'approval_completed',
+          title: 'Ready for disbursement',
+          message: `Loan for ${application.borrowerName} is approved and ready for disbursement.`,
+          severity: 'info',
+          referenceKey: `app-${applicationId}-cashier-disbursement`
+        });
+
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          targetRole: 'loan_officer',
+          type: 'approval_completed',
+          title: 'Loan approved',
+          message: `${application.borrowerName} was approved for ${application.loanType}.`,
+          severity: 'info',
+          referenceKey: `app-${applicationId}-loanofficer-approved`
+        });
+
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          targetRole: 'manager',
+          type: 'approval_completed',
+          title: 'Loan approved',
+          message: `${application.borrowerName} was approved for ${application.loanType}.`,
+          severity: 'info',
+          referenceKey: `app-${applicationId}-manager-approved`
+        });
+
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          borrowerId: application.borrowerId,
+          targetRole: 'borrower',
+          type: 'loan_approved',
+          title: 'Loan approved',
+          message: `Your ${application.loanType} loan application has been approved.`,
+          severity: 'info',
+          referenceKey: `app-${applicationId}-borrower-approved`
+        });
+
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          targetRole: 'admin',
+          type: 'approval_completed',
+          title: 'Loan approved',
+          message: `${application.borrowerName} was approved for ${application.loanType}.`,
+          severity: 'info',
+          referenceKey: `app-${applicationId}-admin-approved`
+        });
+
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          targetRole: 'auditor',
+          type: 'approval_completed',
+          title: 'Loan approved',
+          message: `${application.borrowerName} was approved for ${application.loanType}.`,
+          severity: 'info',
+          referenceKey: `app-${applicationId}-auditor-approved`
+        });
+      }
+
+      if (decision === 'rejected') {
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          borrowerId: application.borrowerId,
+          targetRole: 'borrower',
+          type: 'loan_rejected',
+          title: 'Loan application rejected',
+          message: `Your ${application.loanType} loan application was not approved.`,
+          severity: 'warning',
+          referenceKey: `app-${applicationId}-borrower-rejected`
+        });
+
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          targetRole: 'admin',
+          type: 'loan_rejected',
+          title: 'Loan application rejected',
+          message: `${application.borrowerName} was rejected for ${application.loanType}.`,
+          severity: 'warning',
+          referenceKey: `app-${applicationId}-admin-rejected`
+        });
+
+        await createNotification({
+          actorName: payload.decidedBy || null,
+          actorProfileImage: actorProfile?.profileImage || null,
+          targetRole: 'auditor',
+          type: 'loan_rejected',
+          title: 'Loan application rejected',
+          message: `${application.borrowerName} was rejected for ${application.loanType}.`,
+          severity: 'warning',
+          referenceKey: `app-${applicationId}-auditor-rejected`
+        });
+      }
+    }
+
     res.json({ id: approvalId, status });
   } catch (error) {
     res.status(500).send(error.message);
@@ -902,6 +1347,7 @@ app.post('/api/loan-applications/:id/approvals', async (req, res) => {
 
 app.get('/api/notifications', async (req, res) => {
   try {
+    await runDelinquencyProcessing();
     const loans = await runQuery('SELECT id, borrowerId, borrowerName, nextDueDate, gracePeriodDays, status FROM loans WHERE status = "active"');
     const today = new Date();
 
@@ -916,12 +1362,13 @@ app.get('/api/notifications', async (req, res) => {
         const id = generateId('NT');
         await runExecute(
           `INSERT IGNORE INTO notifications (
-            id, borrowerId, loanId, type, title, message, severity, status, referenceKey, createdAt
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+            id, borrowerId, loanId, targetRole, type, title, message, severity, status, referenceKey, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
           [
             id,
             loan.borrowerId,
             loan.id,
+            'borrower',
             'payment_due',
             'Upcoming payment due',
             `Payment due in ${daysUntilDue} day(s) for ${loan.borrowerName}.`,
@@ -939,12 +1386,13 @@ app.get('/api/notifications', async (req, res) => {
         const id = generateId('NT');
         await runExecute(
           `INSERT IGNORE INTO notifications (
-            id, borrowerId, loanId, type, title, message, severity, status, referenceKey, createdAt
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+            id, borrowerId, loanId, targetRole, type, title, message, severity, status, referenceKey, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
           [
             id,
             loan.borrowerId,
             loan.id,
+            'borrower',
             'payment_overdue',
             'Payment overdue',
             `Payment is overdue by ${daysLate} day(s) for ${loan.borrowerName}.`,
@@ -1094,6 +1542,81 @@ app.post('/api/loans', async (req, res) => {
       details: `Loan disbursed to ${payload.borrowerName} for ${payload.principalAmount}.`
     });
 
+    const disburserProfile = await getUserProfileByName(payload.disbursedBy);
+
+    await createNotification({
+      borrowerId: payload.borrowerId,
+      loanId: id,
+      actorName: payload.disbursedBy || null,
+      actorProfileImage: disburserProfile?.profileImage || null,
+      targetRole: 'borrower',
+      type: 'loan_disbursed',
+      title: 'Loan disbursed',
+      message: `Your loan has been disbursed. Amount: ${payload.principalAmount}.`,
+      severity: 'info',
+      referenceKey: `loan-${id}-disbursed`
+    });
+
+    await createNotification({
+      targetRole: 'cashier',
+      loanId: id,
+      actorName: payload.disbursedBy || null,
+      actorProfileImage: disburserProfile?.profileImage || null,
+      type: 'loan_disbursed',
+      title: 'Loan disbursed',
+      message: `Loan for ${payload.borrowerName} was disbursed.`,
+      severity: 'info',
+      referenceKey: `loan-${id}-cashier-disbursed`
+    });
+
+    await createNotification({
+      targetRole: 'loan_officer',
+      loanId: id,
+      actorName: payload.disbursedBy || null,
+      actorProfileImage: disburserProfile?.profileImage || null,
+      type: 'loan_disbursed',
+      title: 'Loan disbursed',
+      message: `Loan for ${payload.borrowerName} was disbursed.`,
+      severity: 'info',
+      referenceKey: `loan-${id}-loanofficer-disbursed`
+    });
+
+    await createNotification({
+      targetRole: 'manager',
+      loanId: id,
+      actorName: payload.disbursedBy || null,
+      actorProfileImage: disburserProfile?.profileImage || null,
+      type: 'loan_disbursed',
+      title: 'Loan disbursed',
+      message: `Loan for ${payload.borrowerName} was disbursed.`,
+      severity: 'info',
+      referenceKey: `loan-${id}-manager-disbursed`
+    });
+
+    await createNotification({
+      targetRole: 'admin',
+      loanId: id,
+      actorName: payload.disbursedBy || null,
+      actorProfileImage: disburserProfile?.profileImage || null,
+      type: 'loan_disbursed',
+      title: 'Loan disbursed',
+      message: `Loan for ${payload.borrowerName} was disbursed.`,
+      severity: 'info',
+      referenceKey: `loan-${id}-admin-disbursed`
+    });
+
+    await createNotification({
+      targetRole: 'auditor',
+      loanId: id,
+      actorName: payload.disbursedBy || null,
+      actorProfileImage: disburserProfile?.profileImage || null,
+      type: 'loan_disbursed',
+      title: 'Loan disbursed',
+      message: `Loan for ${payload.borrowerName} was disbursed.`,
+      severity: 'info',
+      referenceKey: `loan-${id}-auditor-disbursed`
+    });
+
     const scoreResult = await computeBorrowerScore(payload.borrowerId);
     if (scoreResult) {
       await runExecute('UPDATE borrowers SET creditScore = ? WHERE id = ?', [scoreResult.score, payload.borrowerId]);
@@ -1192,6 +1715,37 @@ app.post('/api/payments', async (req, res) => {
       entityId: id,
       userName: payload.receivedBy,
       details: `Payment received from ${payload.borrowerName} for ${payload.amount}.`
+    });
+
+    await createNotification({
+      borrowerId: loan.borrowerId,
+      loanId: loan.id,
+      targetRole: 'borrower',
+      type: 'payment_received',
+      title: status === 'late' ? 'Late payment received' : 'Payment received',
+      message: `Payment of ${payload.amount} was recorded${status === 'late' ? ' (late)' : ''} for ${loan.borrowerName}.`,
+      severity: status === 'late' ? 'warning' : 'info',
+      referenceKey: `payment-${id}-received`
+    });
+
+    await createNotification({
+      targetRole: 'manager',
+      loanId: loan.id,
+      type: 'payment_received',
+      title: 'Payment received',
+      message: `${loan.borrowerName} made a payment of ${payload.amount}.`,
+      severity: status === 'late' ? 'warning' : 'info',
+      referenceKey: `payment-${id}-manager`
+    });
+
+    await createNotification({
+      targetRole: 'auditor',
+      loanId: loan.id,
+      type: 'payment_received',
+      title: 'Payment received',
+      message: `${loan.borrowerName} made a payment of ${payload.amount}.`,
+      severity: status === 'late' ? 'warning' : 'info',
+      referenceKey: `payment-${id}-auditor`
     });
 
     const borrowerId = loan.borrowerId;

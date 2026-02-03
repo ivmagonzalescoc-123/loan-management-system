@@ -32,6 +32,7 @@ export interface LoanApplication {
   interestRate?: number;
   termMonths?: number;
   creditScore: number;
+  currentCreditScore?: number;
 }
 
 export interface Loan {

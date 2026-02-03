@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { User } from '../App';
-import { BarChart3, PieChart, TrendingUp, Download, Calendar, Shield } from 'lucide-react';
-import { useAuditLogs, useBorrowers, useLoanApplications, useLoans, usePayments } from '../lib/useApiData';
+import { BarChart3, PieChart, TrendingUp, Download, Calendar } from 'lucide-react';
+import { useBorrowers, useLoanApplications, useLoans, usePayments } from '../lib/useApiData';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import * as XLSX from 'xlsx';
 import { formatPhp } from '../lib/currency';
@@ -15,18 +15,11 @@ export function Reports({ user }: ReportsProps) {
   const { data: borrowers } = useBorrowers();
   const { data: loanApplications } = useLoanApplications();
   const { data: payments } = usePayments();
-  const { data: auditLogs } = useAuditLogs();
-  const [selectedReport, setSelectedReport] = useState<'portfolio' | 'delinquency' | 'audit'>('portfolio');
+  const [selectedReport, setSelectedReport] = useState<'portfolio' | 'delinquency'>('portfolio');
   const [dateRange, setDateRange] = useState('month');
   const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx'>('csv');
 
-  const canViewAuditLogs = user.role === 'admin' || user.role === 'auditor';
-
-  useEffect(() => {
-    if (!canViewAuditLogs && selectedReport === 'audit') {
-      setSelectedReport('portfolio');
-    }
-  }, [canViewAuditLogs, selectedReport]);
+  void user;
 
   const now = new Date();
   const getRangeStart = (range: string) => {
@@ -63,7 +56,6 @@ export function Reports({ user }: ReportsProps) {
   const filteredPayments = payments.filter(payment => isWithinRange(payment.paymentDate));
   const filteredLoanApplications = loanApplications.filter(app => isWithinRange(app.reviewDate || app.applicationDate));
   const filteredBorrowers = borrowers.filter(borrower => isWithinRange(borrower.registrationDate));
-  const filteredAuditLogs = auditLogs.filter(log => isWithinRange(log.timestamp));
   const delinquencyLoans = loans.filter(loan => isWithinRange(loan.nextDueDate));
 
   // Portfolio Analysis
@@ -216,11 +208,6 @@ export function Reports({ user }: ReportsProps) {
   };
 
   const handleExport = () => {
-    if (selectedReport === 'audit' && !canViewAuditLogs) {
-      alert('You do not have permission to export audit logs.');
-      return;
-    }
-
     const filename = getExportFileName();
 
     if (selectedReport === 'portfolio') {
@@ -287,41 +274,14 @@ export function Reports({ user }: ReportsProps) {
       return;
     }
 
-    if (selectedReport === 'audit') {
-      if (!canViewAuditLogs) {
-        alert('You do not have permission to view audit logs.');
-        return;
-      }
-
-      const auditRows = filteredAuditLogs.map(log => ({
-        timestamp: new Date(log.timestamp).toLocaleString(),
-        userName: log.userName,
-        userId: log.userId,
-        action: log.action,
-        entity: log.entity,
-        entityId: log.entityId,
-        details: log.details,
-        ipAddress: log.ipAddress
-      }));
-
-      if (exportFormat === 'csv') {
-        const csv = toCsv(auditRows);
-        downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `${filename}.csv`);
-        return;
-      }
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(auditRows), 'Audit Logs');
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      downloadBlob(new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${filename}.xlsx`);
-    }
+    return;
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-gray-900 mb-1">Reports & Analytics</h2>
-        <p className="text-sm text-gray-600">Comprehensive reporting and audit trails</p>
+        <p className="text-sm text-gray-600">Comprehensive reporting and insights</p>
       </div>
 
       {/* Report Type Selector */}
@@ -345,17 +305,6 @@ export function Reports({ user }: ReportsProps) {
             <TrendingUp className="w-4 h-4" />
             Delinquency Report
           </button>
-          {canViewAuditLogs && (
-            <button
-              onClick={() => setSelectedReport('audit')}
-              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                selectedReport === 'audit' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <Shield className="w-4 h-4" />
-              Audit Logs
-            </button>
-          )}
           <div className="ml-auto flex items-center gap-3">
             <select
               value={dateRange}
@@ -488,29 +437,6 @@ export function Reports({ user }: ReportsProps) {
       {/* Delinquency Report */}
       {selectedReport === 'delinquency' && (
         <>
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-gray-900 mb-4">Delinquency by Age</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={delinquencyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="range" />
-                <YAxis yAxisId="left" orientation="left" stroke="#3b82f6" />
-                <YAxis yAxisId="right" orientation="right" stroke="#ef4444" />
-                <Tooltip
-                  formatter={(value: unknown, name: string) => {
-                    if (name === 'Amount (₱)') {
-                      return [formatPhp(Number(value)), name];
-                    }
-                    return [value as any, name];
-                  }}
-                />
-                <Legend />
-                <Bar yAxisId="left" dataKey="count" fill="#3b82f6" name="Number of Loans" />
-                <Bar yAxisId="right" dataKey="amount" fill="#ef4444" name="Amount (₱)" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="text-sm text-red-900 mb-1">Total Delinquent</div>
@@ -574,62 +500,6 @@ export function Reports({ user }: ReportsProps) {
         </>
       )}
 
-      {/* Audit Logs */}
-      {canViewAuditLogs && selectedReport === 'audit' && (
-        <div className="bg-white rounded-lg border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-gray-900 flex items-center gap-2">
-              <Shield className="w-5 h-5 text-blue-600" />
-              System Audit Trail
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">Complete history of all system activities</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Timestamp</th>
-                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Action</th>
-                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Entity</th>
-                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Details</th>
-                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">IP Address</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredAuditLogs.map(log => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{log.userName}</div>
-                      <div className="text-xs text-gray-500">User ID: {log.userId}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        log.action === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                        log.action === 'REJECTED' ? 'bg-red-100 text-red-700' :
-                        log.action === 'DISBURSED' ? 'bg-blue-100 text-blue-700' :
-                        log.action === 'PAYMENT_RECEIVED' ? 'bg-purple-100 text-purple-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {log.action.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{log.entity}</div>
-                      <div className="text-xs text-gray-500">{log.entityId}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 max-w-md">{log.details}</td>
-                    <td className="px-6 py-4 text-sm text-gray-500">{log.ipAddress}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

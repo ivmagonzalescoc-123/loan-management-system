@@ -141,6 +141,55 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
             </div>
           </div>
 
+          {/* Uploaded Images */}
+          <div>
+            <h4 className="text-sm text-gray-600 mb-4">Uploaded Images</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500 mb-2">Profile Photo</div>
+                {borrower.profileImage ? (
+                  <img
+                    src={borrower.profileImage}
+                    alt={`${borrower.firstName} ${borrower.lastName} profile`}
+                    className="w-full h-40 object-cover rounded-lg border border-gray-200"
+                  />
+                ) : (
+                  <div className="h-40 rounded-lg border border-dashed border-gray-300 flex items-center justify-center text-xs text-gray-400">
+                    No profile photo
+                  </div>
+                )}
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500 mb-2">Facial Image</div>
+                {borrower.facialImage ? (
+                  <img
+                    src={borrower.facialImage}
+                    alt={`${borrower.firstName} ${borrower.lastName} facial`}
+                    className="w-full h-40 object-cover rounded-lg border border-gray-200"
+                  />
+                ) : (
+                  <div className="h-40 rounded-lg border border-dashed border-gray-300 flex items-center justify-center text-xs text-gray-400">
+                    No facial image
+                  </div>
+                )}
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500 mb-2">ID Image</div>
+                {borrower.idImage ? (
+                  <img
+                    src={borrower.idImage}
+                    alt={`${borrower.firstName} ${borrower.lastName} ID`}
+                    className="w-full h-40 object-cover rounded-lg border border-gray-200"
+                  />
+                ) : (
+                  <div className="h-40 rounded-lg border border-dashed border-gray-300 flex items-center justify-center text-xs text-gray-400">
+                    No ID image
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Credit Score Section */}
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6">
             <h4 className="text-sm text-gray-900 mb-4">Credit Score Analysis</h4>

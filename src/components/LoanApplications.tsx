@@ -155,13 +155,20 @@ export function LoanApplications({ user }: LoanApplicationsProps) {
                     {formatPhp(app.requestedAmount)}
                   </td>
                   <td className="px-6 py-4">
-                    <div className={`text-sm ${
-                      app.creditScore >= 700 ? 'text-green-600' :
-                      app.creditScore >= 600 ? 'text-yellow-600' :
-                      'text-red-600'
-                    }`}>
-                      {app.creditScore}
-                    </div>
+                    {(() => {
+                      const score = app.currentCreditScore ?? app.creditScore;
+                      return (
+                        <div
+                          className={`text-sm ${
+                            score >= 700 ? 'text-green-600' :
+                            score >= 600 ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}
+                        >
+                          {score}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2 py-1 rounded text-xs capitalize ${

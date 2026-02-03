@@ -3,12 +3,11 @@ import {
   TrendingUp, 
   Users, 
   PhilippinePeso, 
-  AlertCircle,
   CheckCircle,
   Clock,
   XCircle
 } from 'lucide-react';
-import { useBorrowers, useLoanApplications, useLoans, useNotifications, usePayments } from '../lib/useApiData';
+import { useBorrowers, useLoanApplications, useLoans, usePayments } from '../lib/useApiData';
 import { formatPhp } from '../lib/currency';
 
 interface DashboardProps {
@@ -20,7 +19,6 @@ export function Dashboard({ user }: DashboardProps) {
   const { data: loans } = useLoans();
   const { data: loanApplications } = useLoanApplications();
   const { data: payments } = usePayments();
-  const { data: notifications } = useNotifications();
 
   const isBorrower = user.role === 'borrower';
   const borrowerLoans = isBorrower ? loans.filter(l => l.borrowerId === user.id) : loans;
@@ -28,9 +26,6 @@ export function Dashboard({ user }: DashboardProps) {
   const borrowerPayments = isBorrower
     ? payments.filter(p => borrowerLoanIds.has(p.loanId))
     : payments;
-  const borrowerNotifications = isBorrower
-    ? notifications.filter(n => (n.borrowerId && n.borrowerId === user.id) || (n.loanId && borrowerLoanIds.has(n.loanId)))
-    : notifications;
 
   // Calculate statistics
   const totalBorrowers = borrowers.filter(b => b.status === 'active').length;
@@ -46,22 +41,7 @@ export function Dashboard({ user }: DashboardProps) {
 
   const recentPayments = borrowerPayments.slice(0, 5);
   const recentApplications = loanApplications.slice(0, 5);
-  const unreadNotifications = borrowerNotifications.filter(n => n.status === 'unread').slice(0, 5);
 
-  const upcomingBorrowerLoans = borrowerLoans.filter(loan => {
-    if (loan.status !== 'active') return false;
-    const dueDate = new Date(loan.nextDueDate);
-    const today = new Date();
-    const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return daysUntilDue <= 7 && daysUntilDue >= 0;
-  });
-
-  const overdueBorrowerLoans = borrowerLoans.filter(loan => {
-    if (loan.status !== 'active') return false;
-    const dueDate = new Date(loan.nextDueDate);
-    const today = new Date();
-    return dueDate < today;
-  });
 
   const nextDueDate = borrowerLoans
     .filter(l => l.status === 'active')
@@ -249,79 +229,6 @@ export function Dashboard({ user }: DashboardProps) {
         )}
       </div>
 
-      {/* Alerts */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <AlertCircle className="w-5 h-5 text-orange-500" />
-          <h3 className="text-gray-900">Alerts & Notifications</h3>
-        </div>
-        <div className="space-y-3">
-          {isBorrower ? (
-            <>
-              {overdueBorrowerLoans.length > 0 && (
-                <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-                  <div>
-                    <div className="text-sm text-gray-900">{overdueBorrowerLoans.length} overdue loan(s)</div>
-                    <div className="text-xs text-gray-500">Please settle overdue installments.</div>
-                  </div>
-                </div>
-              )}
-              {upcomingBorrowerLoans.length > 0 && (
-                <div className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5" />
-                  <div>
-                    <div className="text-sm text-gray-900">{upcomingBorrowerLoans.length} payment(s) due soon</div>
-                    <div className="text-xs text-gray-500">Payments due within 7 days.</div>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg">
-                <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5" />
-                <div>
-                  <div className="text-sm text-gray-900">2 loans approaching due date</div>
-                  <div className="text-xs text-gray-500">Payments due within 3 days</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600 mt-0.5" />
-                <div>
-                  <div className="text-sm text-gray-900">{pendingApplications} applications pending review</div>
-                  <div className="text-xs text-gray-500">Action required from loan officers</div>
-                </div>
-              </div>
-            </>
-          )}
-            {/* Notifications */}
-            {unreadNotifications.length === 0 ? (
-              <div className="text-sm text-gray-500">No new reminders.</div>
-            ) : (
-              unreadNotifications.map(note => (
-                <div key={note.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm text-gray-900">{note.title}</div>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        note.severity === 'critical'
-                          ? 'bg-red-100 text-red-700'
-                          : note.severity === 'warning'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {note.severity}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-600">{note.message}</div>
-                  </div>
-                </div>
-              ))
-            )}
-        </div>
-      </div>
     </div>
   );
 }

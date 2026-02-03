@@ -241,7 +241,7 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
             active: loans.filter(loan => loan.borrowerId === selectedBorrower.id && loan.status === 'active').length,
             totalBorrowed: loans
               .filter(loan => loan.borrowerId === selectedBorrower.id)
-              .reduce((sum, loan) => sum + loan.principalAmount, 0)
+              .reduce((sum, loan) => sum + Number(loan.principalAmount || 0), 0)
           }}
           onClose={() => setShowDetails(false)}
         />
@@ -259,7 +259,7 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
 
       {showEditBorrowerForm && editingBorrower && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-gray-900">Edit Borrower</h3>
               <p className="text-sm text-gray-600 mt-1">{editingBorrower.id}</p>

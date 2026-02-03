@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Upload, FileText, CheckCircle, AlertCircle, Banknote } from 'lucide-react';
 import { LoanApplication } from '../lib/types';
-import { consumeAuthorizationCode, createLoan } from '../lib/api';
+import { createLoan } from '../lib/api';
 import { useBorrowers } from '../lib/useApiData';
 import { formatPhp } from '../lib/currency';
 import type { Loan } from '../lib/types';
@@ -30,7 +30,7 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
     branchCode: '',
     checkNumber: '',
     checkDate: new Date().toISOString().split('T')[0],
-    digitalWalletProvider: 'paypal',
+    digitalWalletProvider: 'gcash',
     walletId: '',
     disbursementDate: new Date().toISOString().split('T')[0],
     disbursementTime: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
@@ -39,13 +39,14 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
     notes: '',
     attachments: [] as string[],
     confirmAmount: '',
-    confirmAccountNumber: '',
-    verificationCode: ''
+    confirmAccountNumber: ''
   });
 
   const [step, setStep] = useState(1);
   const [accountSource, setAccountSource] = useState<'borrower' | 'other'>(hasSavedBank ? 'borrower' : 'other');
   const [createdLoanForReceipt, setCreatedLoanForReceipt] = useState<Loan | null>(null);
+  const [transferStatus, setTransferStatus] = useState<'idle' | 'processing' | 'sent'>('idle');
+  const transferTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!hasSavedBank) return;
@@ -66,6 +67,31 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
       accountHolderName: `${borrower.firstName} ${borrower.lastName}`
     }));
   }, [accountSource, borrower]);
+
+  useEffect(() => {
+    if (transferTimerRef.current) {
+      window.clearTimeout(transferTimerRef.current);
+      transferTimerRef.current = null;
+    }
+
+    if (!createdLoanForReceipt) {
+      setTransferStatus('idle');
+      return;
+    }
+
+    setTransferStatus('processing');
+    transferTimerRef.current = window.setTimeout(() => {
+      setTransferStatus('sent');
+      transferTimerRef.current = null;
+    }, 3000);
+
+    return () => {
+      if (transferTimerRef.current) {
+        window.clearTimeout(transferTimerRef.current);
+        transferTimerRef.current = null;
+      }
+    };
+  }, [createdLoanForReceipt, formData.disbursementMethod]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -121,17 +147,7 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
     const monthlyPayment = calculateMonthlyPayment(approvedAmount, interestRate, termMonths, interestType);
     const totalAmount = monthlyPayment * termMonths;
 
-    if (!formData.verificationCode) {
-      alert('Authorization code is required.');
-      return;
-    }
-
     try {
-      await consumeAuthorizationCode({
-        applicationId: application.id,
-        code: formData.verificationCode.trim()
-      });
-
       const receiptNumber = `DR-${Date.now().toString().slice(-6)}`;
       const referenceNumber = formData.referenceNumber || `REF-${Date.now().toString().slice(-8)}`;
       const disbursementMethod = formData.disbursementMethod;
@@ -232,6 +248,26 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
           </button>
         </div>
 
+        {transferStatus !== 'idle' && (
+          <div className="px-6 pt-4">
+            {transferStatus === 'processing' ? (
+              <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <div className="text-sm text-blue-900">
+                  Processing disbursement...
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <div className="text-sm text-green-900">
+                  Disbursement sent.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Progress Steps */}
         <div className="px-6 pt-4">
           <div className="flex items-center justify-between mb-6">
@@ -288,7 +324,7 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
                   { value: 'bank_transfer', label: 'Bank Transfer', icon: Banknote, desc: 'Direct transfer to bank account' },
                   { value: 'check', label: 'Check', icon: FileText, desc: 'Physical check issuance' },
                   { value: 'cash', label: 'Cash', icon: Banknote, desc: 'Cash disbursement' },
-                  { value: 'digital_wallet', label: 'Digital Wallet', icon: Banknote, desc: 'PayPal, Venmo, etc.' }
+                  { value: 'digital_wallet', label: 'Digital Wallet', icon: Banknote, desc: 'PayMaya, GCash, Coins.ph' }
                 ].map(method => {
                   const Icon = method.icon;
                   return (
@@ -533,22 +569,20 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     >
-                      <option value="paypal">PayPal</option>
-                      <option value="venmo">Venmo</option>
-                      <option value="cashapp">Cash App</option>
-                      <option value="zelle">Zelle</option>
-                      <option value="other">Other</option>
+                      <option value="paymaya">PayMaya</option>
+                      <option value="gcash">GCash</option>
+                      <option value="coins.ph">Coins.ph</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-700 mb-2">Wallet ID / Email / Phone *</label>
+                    <label className="block text-sm text-gray-700 mb-2">Phone/Account No.</label>
                     <input
                       type="text"
                       name="walletId"
                       value={formData.walletId}
                       onChange={handleChange}
-                      placeholder="e.g., user@email.com or phone number"
+                      placeholder="account or phone number"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />
@@ -743,19 +777,6 @@ export function DisbursementForm({ application, onClose, onDisburse }: Disbursem
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm text-gray-700 mb-2">Authorization Code *</label>
-                  <input
-                    type="text"
-                    name="verificationCode"
-                    value={formData.verificationCode}
-                    onChange={handleChange}
-                    placeholder="Enter your authorization code"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Use the code generated by admin or loan officer.</p>
-                </div>
               </div>
 
               <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">

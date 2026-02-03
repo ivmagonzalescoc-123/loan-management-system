@@ -39,6 +39,7 @@ export interface LoanApplication {
   interestRate?: number;
   termMonths?: number;
   creditScore: number;
+  currentCreditScore?: number;
   eligibilityStatus?: 'pending' | 'eligible' | 'ineligible' | 'manual_review';
   eligibilityScore?: number;
   incomeRatio?: number;
@@ -109,7 +110,21 @@ export interface Notification {
   id: string;
   borrowerId?: string | null;
   loanId?: string | null;
-  type: 'payment_due' | 'payment_overdue' | 'approval_pending' | 'kyc_pending' | 'general';
+  actorName?: string | null;
+  actorProfileImage?: string | null;
+  targetRole?: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor' | null;
+  type:
+    | 'payment_due'
+    | 'payment_overdue'
+    | 'approval_pending'
+    | 'approval_requested'
+    | 'approval_completed'
+    | 'loan_approved'
+    | 'loan_rejected'
+    | 'loan_disbursed'
+    | 'payment_received'
+    | 'kyc_pending'
+    | 'general';
   title: string;
   message: string;
   severity: 'info' | 'warning' | 'critical';

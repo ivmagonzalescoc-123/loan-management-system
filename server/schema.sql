@@ -108,6 +108,29 @@ CREATE TABLE IF NOT EXISTS payments (
   receiptNumber VARCHAR(50) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS loan_penalties (
+  id VARCHAR(20) PRIMARY KEY,
+  loanId VARCHAR(20) NOT NULL,
+  penaltyDate VARCHAR(20) NOT NULL,
+  daysLate INT NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  createdAt VARCHAR(30) NOT NULL,
+  UNIQUE KEY uniq_loan_penalties (loanId, penaltyDate)
+);
+
+CREATE TABLE IF NOT EXISTS collections (
+  id VARCHAR(20) PRIMARY KEY,
+  loanId VARCHAR(20) NOT NULL,
+  borrowerId VARCHAR(20) NOT NULL,
+  borrowerName VARCHAR(200) NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  reason TEXT,
+  daysDelinquent INT,
+  createdAt VARCHAR(30) NOT NULL,
+  forwardedAt VARCHAR(30),
+  UNIQUE KEY uniq_collections_loanId (loanId)
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id VARCHAR(20) PRIMARY KEY,
   userId VARCHAR(50) NOT NULL,
@@ -189,6 +212,9 @@ CREATE TABLE IF NOT EXISTS notifications (
   id VARCHAR(20) PRIMARY KEY,
   borrowerId VARCHAR(20),
   loanId VARCHAR(20),
+  actorName VARCHAR(150),
+  actorProfileImage LONGTEXT,
+  targetRole VARCHAR(30),
   type VARCHAR(30) NOT NULL,
   title VARCHAR(150) NOT NULL,
   message TEXT NOT NULL,

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { User } from '../App';
-import { Search, Users, Plus, Edit, Archive, KeyRound, RotateCcw } from 'lucide-react';
+import { Search, Users, Plus, Edit, Archive, KeyRound, RotateCcw, User as UserIcon } from 'lucide-react';
 import { useUsers } from '../lib/useApiData';
 import { AppUser } from '../lib/types';
 import { createUser, loginUser, resetUserPasswordByEmail, updateUser } from '../lib/api';
@@ -226,7 +226,22 @@ export function UserManagement({ user }: UserManagementProps) {
             <tbody className="divide-y divide-gray-200">
               {activeUsers.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900">{u.name}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    <div className="flex items-center gap-3">
+                      {u.profileImage ? (
+                        <img
+                          src={u.profileImage}
+                          alt={u.name}
+                          className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                        />
+                      ) : (
+                        <span className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center border border-gray-200">
+                          <UserIcon className="w-4 h-4" />
+                        </span>
+                      )}
+                      <span>{u.name}</span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-900">{u.email}</td>
                   <td className="px-6 py-4">
                     <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 capitalize">
@@ -303,7 +318,22 @@ export function UserManagement({ user }: UserManagementProps) {
             <tbody className="divide-y divide-gray-200">
               {archivedUsers.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900">{u.name}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    <div className="flex items-center gap-3">
+                      {u.profileImage ? (
+                        <img
+                          src={u.profileImage}
+                          alt={u.name}
+                          className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                        />
+                      ) : (
+                        <span className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center border border-gray-200">
+                          <UserIcon className="w-4 h-4" />
+                        </span>
+                      )}
+                      <span>{u.name}</span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-900">{u.email}</td>
                   <td className="px-6 py-4">
                     <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 capitalize">
@@ -348,7 +378,7 @@ export function UserManagement({ user }: UserManagementProps) {
 
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-lg w-full">
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-gray-900">{editingUser ? 'Edit User' : 'Create User'}</h3>
               <p className="text-sm text-gray-600 mt-1">Manage account details and role</p>
@@ -471,7 +501,7 @@ export function UserManagement({ user }: UserManagementProps) {
 
       {resetInfo && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full">
+          <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-gray-900">Temporary Password</h3>
               <p className="text-sm text-gray-600 mt-1">Share this with the borrower</p>
@@ -500,7 +530,7 @@ export function UserManagement({ user }: UserManagementProps) {
 
       {restoreTarget && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full">
+          <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-gray-900">Restore User</h3>
               <p className="text-sm text-gray-600 mt-1">

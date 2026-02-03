@@ -15,6 +15,10 @@ interface DisbursementReceiptModalProps {
 export function DisbursementReceiptModal({ loan, onClose }: DisbursementReceiptModalProps) {
   const receipt = buildReceiptDataFromLoan(loan);
   const meta = parseDisbursementMeta(loan.disbursementMeta);
+  const method = (meta?.disbursementMethod || loan.disbursementMethod || '').toLowerCase();
+  const isBankTransfer = method === 'bank_transfer';
+  const isCheck = method === 'check';
+  const isDigitalWallet = method === 'digital_wallet';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -78,44 +82,50 @@ export function DisbursementReceiptModal({ loan, onClose }: DisbursementReceiptM
               </div>
             </div>
 
-            {(meta?.bankName || meta?.accountNumberLast4) && (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <div className="text-gray-500">Bank</div>
-                  <div className="text-gray-900">{meta?.bankName || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-gray-500">Account</div>
-                  <div className="text-gray-900">{meta?.accountNumberLast4 ? `***${meta.accountNumberLast4}` : '—'}</div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="text-gray-500">Bank</div>
+                <div className="text-gray-900">
+                  {isBankTransfer ? (meta?.bankName || '—') : '—'}
                 </div>
               </div>
-            )}
+              <div>
+                <div className="text-gray-500">Account</div>
+                <div className="text-gray-900">
+                  {isBankTransfer && meta?.accountNumberLast4 ? `***${meta.accountNumberLast4}` : '—'}
+                </div>
+              </div>
+            </div>
 
-            {(meta?.checkNumber || meta?.checkDate) && (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <div className="text-gray-500">Check No.</div>
-                  <div className="text-gray-900">{meta?.checkNumber || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-gray-500">Check Date</div>
-                  <div className="text-gray-900">{meta?.checkDate || '—'}</div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="text-gray-500">Check No.</div>
+                <div className="text-gray-900">
+                  {isCheck ? (meta?.checkNumber || '—') : '—'}
                 </div>
               </div>
-            )}
+              <div>
+                <div className="text-gray-500">Check Date</div>
+                <div className="text-gray-900">
+                  {isCheck ? (meta?.checkDate || '—') : '—'}
+                </div>
+              </div>
+            </div>
 
-            {(meta?.digitalWalletProvider || meta?.walletId) && (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <div className="text-gray-500">Wallet Provider</div>
-                  <div className="text-gray-900">{meta?.digitalWalletProvider || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-gray-500">Wallet ID</div>
-                  <div className="text-gray-900">{meta?.walletId || '—'}</div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="text-gray-500">Wallet Provider</div>
+                <div className="text-gray-900">
+                  {isDigitalWallet ? (meta?.digitalWalletProvider || '—') : '—'}
                 </div>
               </div>
-            )}
+              <div>
+                <div className="text-gray-500">Wallet ID</div>
+                <div className="text-gray-900">
+                  {isDigitalWallet ? (meta?.walletId || '—') : '—'}
+                </div>
+              </div>
+            </div>
 
             {meta?.notes && (
               <div className="mt-4 text-sm">

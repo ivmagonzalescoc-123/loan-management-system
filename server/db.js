@@ -148,6 +148,33 @@ async function init() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS loan_penalties (
+      id VARCHAR(20) PRIMARY KEY,
+      loanId VARCHAR(20) NOT NULL,
+      penaltyDate VARCHAR(20) NOT NULL,
+      daysLate INT NOT NULL,
+      amount DECIMAL(12,2) NOT NULL,
+      createdAt VARCHAR(30) NOT NULL,
+      UNIQUE KEY uniq_loan_penalties (loanId, penaltyDate)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS collections (
+      id VARCHAR(20) PRIMARY KEY,
+      loanId VARCHAR(20) NOT NULL,
+      borrowerId VARCHAR(20) NOT NULL,
+      borrowerName VARCHAR(200) NOT NULL,
+      status VARCHAR(20) NOT NULL,
+      reason TEXT,
+      daysDelinquent INT,
+      createdAt VARCHAR(30) NOT NULL,
+      forwardedAt VARCHAR(30),
+      UNIQUE KEY uniq_collections_loanId (loanId)
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_logs (
       id VARCHAR(20) PRIMARY KEY,
       userId VARCHAR(50) NOT NULL,
@@ -236,6 +263,9 @@ async function init() {
       id VARCHAR(20) PRIMARY KEY,
       borrowerId VARCHAR(20),
       loanId VARCHAR(20),
+      actorName VARCHAR(150),
+      actorProfileImage LONGTEXT,
+      targetRole VARCHAR(30),
       type VARCHAR(30) NOT NULL,
       title VARCHAR(150) NOT NULL,
       message TEXT NOT NULL,
@@ -246,6 +276,25 @@ async function init() {
       UNIQUE KEY uniq_notifications_referenceKey (referenceKey)
     )
   `);
+
+  const addColumnIfMissing = async (table, columnDef) => {
+    try {
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+    } catch (error) {
+      const message = error?.message || '';
+      if (!message.includes('Duplicate column')) {
+        throw error;
+      }
+    }
+  };
+
+  try {
+    await pool.query('ALTER TABLE notifications ADD COLUMN targetRole VARCHAR(30)');
+  } catch {
+    // ignore if column exists
+  }
+  await addColumnIfMissing('notifications', 'actorName VARCHAR(150)');
+  await addColumnIfMissing('notifications', 'actorProfileImage LONGTEXT');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS loan_transfers (
@@ -292,17 +341,6 @@ async function init() {
       remarks TEXT
     )
   `);
-
-  const addColumnIfMissing = async (table, columnDef) => {
-    try {
-      await pool.query(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
-    } catch (error) {
-      const message = error?.message || '';
-      if (!message.includes('Duplicate column')) {
-        throw error;
-      }
-    }
-  };
 
   await addColumnIfMissing('borrowers', 'bankName VARCHAR(150)');
   await addColumnIfMissing('borrowers', 'accountNumber VARCHAR(50)');
