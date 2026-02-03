@@ -4,6 +4,7 @@ import { LoanApplication } from '../lib/types';
 import { createLoanApproval, updateLoanApplication } from '../lib/api';
 import { formatPhp } from '../lib/currency';
 import { User } from '../App';
+import { getPermissionSettings } from '../lib/permissions';
 
 interface ApprovalFormProps {
   application: LoanApplication;
@@ -90,6 +91,41 @@ export function ApprovalForm({ application, user, onClose, onApprove, onReject }
     const gracePeriodDays = parseInt(formData.gracePeriodDays, 10);
     const penaltyRate = parseFloat(formData.penaltyRate);
     const penaltyFlat = parseFloat(formData.penaltyFlat);
+    const permissionSettings = getPermissionSettings();
+    const approvalSettings = permissionSettings.approvals;
+    const overrideLimit = Number(approvalSettings.overrideLimit || 0);
+    const canLoanOfficerOverrideManager =
+      user.role === 'loan_officer' &&
+      approvalSettings.allowLoanOfficerManagerOverride &&
+      approvedAmount <= overrideLimit;
+    const shouldBypassManager =
+      approvalSettings.bypassManagerApproval &&
+      (user.role === 'loan_officer' || user.role === 'admin');
+    const shouldBypassLoanOfficer =
+      approvalSettings.bypassLoanOfficerApproval &&
+      (user.role === 'manager' || user.role === 'admin');
+
+    const createAdditionalApprovals = async (decision: 'approved' | 'rejected') => {
+      const extraStages: Array<'loan_officer' | 'manager'> = [];
+      if ((shouldBypassManager || canLoanOfficerOverrideManager) && approvalStage !== 'manager') {
+        extraStages.push('manager');
+      }
+      if (shouldBypassLoanOfficer && approvalStage !== 'loan_officer') {
+        extraStages.push('loan_officer');
+      }
+      if (extraStages.length === 0) return;
+      await Promise.all(
+        extraStages.map((stage) =>
+          createLoanApproval(application.id, {
+            approvalStage: stage,
+            decision,
+            decidedBy: user.name,
+            decidedById: user.id,
+            notes: 'Auto-approved by permission override'
+          })
+        )
+      );
+    };
 
     if (action === 'approve') {
       await updateLoanApplication(application.id, {
@@ -111,6 +147,7 @@ export function ApprovalForm({ application, user, onClose, onApprove, onReject }
         decidedById: user.id,
         notes: formData.specialConditions || formData.internalNotes || undefined
       });
+      await createAdditionalApprovals('approved');
       onApprove();
       return;
     }
@@ -127,6 +164,7 @@ export function ApprovalForm({ application, user, onClose, onApprove, onReject }
       decidedById: user.id,
       notes: `${formData.rejectionCategory}: ${formData.rejectionReason}`.trim()
     });
+    await createAdditionalApprovals('rejected');
     onReject();
   };
 

@@ -8,6 +8,7 @@ import { LoanContinuityActions } from "./components/LoanContinuityActions";
 import { Reports } from "./components/Reports";
 import { Login } from "./components/Login";
 import { UserManagement } from "./components/UserManagement";
+import { PermissionSettings } from "./components/PermissionSettings";
 import { BorrowerProfile } from "./components/BorrowerProfile";
 import { UserProfile } from "./components/UserProfile";
 import { BorrowerLoanHistory } from "./components/BorrowerLoanHistory";
@@ -34,6 +35,7 @@ import {
 } from "lucide-react";
 import { markNotificationRead } from "./lib/api";
 import { useLoans, useNotifications } from "./lib/useApiData";
+import { getPermissionSettings, isNavAllowed, type PermissionSettings as PermissionSettingsState } from "./lib/permissions";
 
 export type UserRole =
   | "admin"
@@ -61,6 +63,7 @@ type View =
   | "repayments"
   | "loan-continuity"
   | "reports"
+  | "permissions"
   | "user-management"
   | "profile"
   | "notifications"
@@ -77,8 +80,10 @@ export default function App() {
   );
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  const [permissionSettings, setPermissionSettings] = useState<PermissionSettingsState>(() => getPermissionSettings());
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const notificationsMenuRef = useRef<HTMLDivElement | null>(null);
+  const idleTimeoutRef = useRef<number | null>(null);
   const { data: notifications, refresh: refreshNotifications } =
     useNotifications();
   const { data: loans } = useLoans();
@@ -96,6 +101,40 @@ export default function App() {
     if (parts.length === 0) return "";
     return parts[parts.length - 1];
   };
+
+  const clearSession = () => {
+    sessionStorage.removeItem("lms-session-user");
+  };
+
+  const persistSession = (user: User | null) => {
+    if (!user) {
+      clearSession();
+      return;
+    }
+    sessionStorage.setItem("lms-session-user", JSON.stringify(user));
+  };
+
+  const resetIdleTimer = () => {
+    if (!currentUser) return;
+    if (idleTimeoutRef.current) {
+      window.clearTimeout(idleTimeoutRef.current);
+    }
+    idleTimeoutRef.current = window.setTimeout(() => {
+      handleLogout();
+    }, 15 * 60 * 1000);
+  };
+
+  useEffect(() => {
+    const storedUser = sessionStorage.getItem("lms-session-user");
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser) as User;
+        setCurrentUser(parsed);
+      } catch {
+        clearSession();
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!showProfileMenu && !showNotificationsMenu) return;
@@ -118,13 +157,47 @@ export default function App() {
     setShowNotificationsMenu(false);
   }, [currentView]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    const activityEvents = ["mousemove", "keydown", "click", "scroll", "touchstart"] as const;
+
+    const handleActivity = () => {
+      resetIdleTimer();
+    };
+
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, handleActivity, { passive: true });
+    });
+
+    resetIdleTimer();
+
+    return () => {
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, handleActivity);
+      });
+      if (idleTimeoutRef.current) {
+        window.clearTimeout(idleTimeoutRef.current);
+      }
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      refreshNotifications();
+    }, 8000);
+
+    return () => window.clearInterval(intervalId);
+  }, [refreshNotifications]);
+
   const handleLogin = (user: User) => {
     setCurrentUser(user);
+    persistSession(user);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setCurrentView("dashboard");
+    clearSession();
   };
 
   if (!currentUser) {
@@ -196,6 +269,12 @@ export default function App() {
       roles: ["admin"],
     },
     {
+      id: "permissions" as View,
+      label: "Permissions",
+      icon: Shield,
+      roles: ["admin"],
+    },
+    {
       id: "applications" as View,
       label: "Loan Applications",
       icon: FileText,
@@ -250,7 +329,7 @@ export default function App() {
       icon: Receipt,
       roles: ["borrower"],
     },
-  ].filter((item) => item.roles.includes(currentUser.role));
+  ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings));
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -314,9 +393,12 @@ export default function App() {
             >
               <Bell className="w-5 h-5 text-green-100" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </span>
+                <>
+                  <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500" />
+                  <span className="absolute top-0 right-0 translate-x-1/3 -translate-y-1/3 h-5 min-w-[22px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
+                    +{unreadCount > 9 ? "9" : unreadCount}
+                  </span>
+                </>
               )}
             </button>
             {showNotificationsMenu && (
@@ -451,6 +533,11 @@ export default function App() {
           )}
           {currentView === "reports" && (
             <Reports user={currentUser} />
+          )}
+          {currentView === "permissions" && (
+            <PermissionSettings
+              onUpdated={(next) => setPermissionSettings(next)}
+            />
           )}
           {currentView === "audit-logs" && (
             <AuditLogs />

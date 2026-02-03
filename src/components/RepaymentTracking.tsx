@@ -23,6 +23,7 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [tableView, setTableView] = useState<'loans' | 'payments'>('loans');
 
   const activeLoans = loans.filter(loan => 
     loan.status === 'active' &&
@@ -184,199 +185,226 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
         </div>
       </div>
 
-      {/* Active Loans Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Loan ID</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Borrower</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Principal</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Outstanding</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Monthly Payment</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Next Due Date</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Progress</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {activeLoans.map(loan => {
-                const principalAmount = Number(loan.principalAmount || 0);
-                const outstandingBalance = Number(loan.outstandingBalance || 0);
-                const paidPercentage = principalAmount > 0
-                  ? ((principalAmount - outstandingBalance) / principalAmount) * 100
-                  : 0;
-                const dueDate = new Date(loan.nextDueDate);
-                const today = new Date();
-                const isOverdue = dueDate < today;
-                const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                
-                return (
-                  <tr key={loan.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">{loan.id}</td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{loan.borrowerName}</div>
-                      <div className="text-xs text-gray-500">{loan.loanType}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.principalAmount)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.outstandingBalance)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.monthlyPayment)}</td>
-                    <td className="px-6 py-4">
-                      <div className={`text-sm ${isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
-                        {loan.nextDueDate}
-                      </div>
-                      <div className={`text-xs ${isOverdue ? 'text-red-600' : 'text-gray-500'}`}>
-                        {isOverdue ? `Overdue by ${Math.abs(daysUntilDue)} days` : 
-                         daysUntilDue <= 7 ? `Due in ${daysUntilDue} days` : ''}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-green-500"
-                            style={{ width: `${paidPercentage}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-600">{Math.round(paidPercentage)}%</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleRecordPayment(loan.id)}
-                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-                        >
-                          <Plus className="w-3 h-3" />
-                          Payment
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Recent Payments */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h3 className="text-gray-900 flex items-center gap-2">
-                <PhilippinePeso className="w-5 h-5 text-green-600" />
-                Recent Payments
-              </h3>
-              <div className="text-xs text-gray-600">
-                Showing <span className="text-gray-900">{filteredPayments.length}</span> of{' '}
-                <span className="text-gray-900">{payments.length}</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col md:flex-row md:items-end gap-3">
-              <div className="w-full md:flex-1">
-                <label className="block text-xs text-gray-600 mb-1">Search</label>
-                <input
-                  value={paymentSearchQuery}
-                  onChange={(e) => setPaymentSearchQuery(e.target.value)}
-                  placeholder="Search receipt, borrower, loan ID, received by..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="w-full md:w-40">
-                <label className="block text-xs text-gray-600 mb-1">Status</label>
-                <select
-                  value={paymentStatusFilter}
-                  onChange={(e) => setPaymentStatusFilter(e.target.value as 'all' | 'paid' | 'late' | 'pending')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All</option>
-                  <option value="paid">Paid</option>
-                  <option value="late">Late</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
-              <div className="w-full md:w-40">
-                <label className="block text-xs text-gray-600 mb-1">From</label>
-                <input
-                  type="date"
-                  value={paymentDateFrom}
-                  onChange={(e) => setPaymentDateFrom(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="w-full md:w-40">
-                <label className="block text-xs text-gray-600 mb-1">To</label>
-                <input
-                  type="date"
-                  value={paymentDateTo}
-                  onChange={(e) => setPaymentDateTo(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="flex justify-end md:justify-start">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaymentSearchQuery('');
-                    setPaymentStatusFilter('all');
-                    setPaymentDateFrom('');
-                    setPaymentDateTo('');
-                  }}
-                  className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
+        <div className="border-b border-gray-200">
+          <div className="flex flex-wrap gap-2 p-4">
+            <button
+              onClick={() => setTableView('loans')}
+              className={`px-4 py-2 text-sm rounded-lg border ${
+                tableView === 'loans'
+                  ? 'bg-blue-50 border-blue-500 text-blue-700'
+                  : 'border-gray-200 text-gray-700'
+              }`}
+            >
+              Active Loans
+            </button>
+            <button
+              onClick={() => setTableView('payments')}
+              className={`px-4 py-2 text-sm rounded-lg border ${
+                tableView === 'payments'
+                  ? 'bg-green-50 border-green-500 text-green-700'
+                  : 'border-gray-200 text-gray-700'
+              }`}
+            >
+              Recent Payments
+            </button>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Receipt #</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Borrower</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Amount</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Payment Date</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Due Date</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Received By</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredPayments.map(payment => (
-                <tr key={payment.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900">{payment.receiptNumber}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{payment.borrowerName}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {formatPhp(payment.amount)}
-                    {payment.lateFee && (
-                      <span className="text-xs text-red-600 ml-1">
-                        (+{formatPhp(payment.lateFee)} late fee)
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{payment.paymentDate}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{payment.dueDate}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded text-xs capitalize ${
-                      payment.status === 'paid' ? 'bg-green-100 text-green-700' :
-                      payment.status === 'late' ? 'bg-red-100 text-red-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {payment.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{payment.receivedBy}</td>
+
+        {tableView === 'loans' && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Loan ID</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Borrower</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Principal</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Outstanding</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Monthly Payment</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Next Due Date</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Progress</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {activeLoans.map(loan => {
+                  const principalAmount = Number(loan.principalAmount || 0);
+                  const outstandingBalance = Number(loan.outstandingBalance || 0);
+                  const paidPercentage = principalAmount > 0
+                    ? ((principalAmount - outstandingBalance) / principalAmount) * 100
+                    : 0;
+                  const dueDate = new Date(loan.nextDueDate);
+                  const today = new Date();
+                  const isOverdue = dueDate < today;
+                  const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  
+                  return (
+                    <tr key={loan.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-900">{loan.id}</td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">{loan.borrowerName}</div>
+                        <div className="text-xs text-gray-500">{loan.loanType}</div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.principalAmount)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.outstandingBalance)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{formatPhp(loan.monthlyPayment)}</td>
+                      <td className="px-6 py-4">
+                        <div className={`text-sm ${isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
+                          {loan.nextDueDate}
+                        </div>
+                        <div className={`text-xs ${isOverdue ? 'text-red-600' : 'text-gray-500'}`}>
+                          {isOverdue ? `Overdue by ${Math.abs(daysUntilDue)} days` : 
+                           daysUntilDue <= 7 ? `Due in ${daysUntilDue} days` : ''}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-green-500"
+                              style={{ width: `${paidPercentage}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-gray-600">{Math.round(paidPercentage)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleRecordPayment(loan.id)}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Payment
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {tableView === 'payments' && (
+          <div>
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <h3 className="text-gray-900 flex items-center gap-2">
+                    <PhilippinePeso className="w-5 h-5 text-green-600" />
+                    Recent Payments
+                  </h3>
+                  <div className="text-xs text-gray-600">
+                    Showing <span className="text-gray-900">{filteredPayments.length}</span> of{' '}
+                    <span className="text-gray-900">{payments.length}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row md:items-end gap-3">
+                  <div className="w-full md:flex-1">
+                    <label className="block text-xs text-gray-600 mb-1">Search</label>
+                    <input
+                      value={paymentSearchQuery}
+                      onChange={(e) => setPaymentSearchQuery(e.target.value)}
+                      placeholder="Search receipt, borrower, loan ID, received by..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="w-full md:w-40">
+                    <label className="block text-xs text-gray-600 mb-1">Status</label>
+                    <select
+                      value={paymentStatusFilter}
+                      onChange={(e) => setPaymentStatusFilter(e.target.value as 'all' | 'paid' | 'late' | 'pending')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All</option>
+                      <option value="paid">Paid</option>
+                      <option value="late">Late</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                  <div className="w-full md:w-40">
+                    <label className="block text-xs text-gray-600 mb-1">From</label>
+                    <input
+                      type="date"
+                      value={paymentDateFrom}
+                      onChange={(e) => setPaymentDateFrom(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="w-full md:w-40">
+                    <label className="block text-xs text-gray-600 mb-1">To</label>
+                    <input
+                      type="date"
+                      value={paymentDateTo}
+                      onChange={(e) => setPaymentDateTo(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex justify-end md:justify-start">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentSearchQuery('');
+                        setPaymentStatusFilter('all');
+                        setPaymentDateFrom('');
+                        setPaymentDateTo('');
+                      }}
+                      className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Receipt #</th>
+                    <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Borrower</th>
+                    <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Payment Date</th>
+                    <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Due Date</th>
+                    <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">Received By</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredPayments.map(payment => (
+                    <tr key={payment.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-900">{payment.receiptNumber}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{payment.borrowerName}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {formatPhp(payment.amount)}
+                        {payment.lateFee && (
+                          <span className="text-xs text-red-600 ml-1">
+                            (+{formatPhp(payment.lateFee)} late fee)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{payment.paymentDate}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{payment.dueDate}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded text-xs capitalize ${
+                          payment.status === 'paid' ? 'bg-green-100 text-green-700' :
+                          payment.status === 'late' ? 'bg-red-100 text-red-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {payment.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{payment.receivedBy}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Payment Form Modal */}
