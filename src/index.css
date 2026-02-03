@@ -1503,6 +1503,337 @@ html {
   font-size: var(--font-size);
 }
 
+/* App-specific forest green button and overrides (ensures styles are loaded) */
+:root {
+  --forest-50: #e8f5e9;
+  --forest-100: #c8e6c9;
+  --forest-600: #2e7d32;
+  --forest-700: #1b5e20;
+  --forest-800: #145a1c;
+}
+
+/* Strong, high-specificity forest green button used where Tailwind output may be absent/overridden */
+.btn-forest {
+  background-color: var(--forest-700) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+.btn-forest:hover {
+  background-color: var(--forest-800) !important;
+}
+.btn-forest:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Replace common blue utilities with forest green counterparts */
+.bg-blue-50 { background-color: var(--forest-50) !important; }
+.bg-blue-100 { background-color: var(--forest-100) !important; }
+.bg-blue-600 { background-color: var(--forest-700) !important; }
+.bg-blue-700 { background-color: var(--forest-800) !important; }
+.text-blue-600 { color: var(--forest-700) !important; }
+.text-blue-700 { color: var(--forest-800) !important; }
+.hover\:bg-blue-700:hover { background-color: var(--forest-800) !important; }
+.hover\:bg-blue-600:hover { background-color: var(--forest-700) !important; }
+.hover\:text-blue-700:hover { color: var(--forest-800) !important; }
+.hover\:text-blue-600:hover { color: var(--forest-700) !important; }
+.focus\:ring-blue-500:focus { --tw-ring-color: var(--forest-600) !important; }
+
+/* Modal helper to constrain forgot-password dialog */
+.login-forgot-modal .modal-inner {
+  max-width: 20rem; /* ~320px */
+  width: 100%;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+/* Header and sidebar specific rules to ensure forest green theme */
+.app-header {
+  background-color: var(--forest-700) !important;
+  border-bottom-color: var(--forest-800) !important;
+  color: var(--forest-50) !important;
+}
+.app-header .flex.items-center svg {
+  color: var(--forest-50) !important;
+}
+
+.app-sidebar {
+  background-color: var(--forest-800) !important;
+  color: var(--forest-50) !important;
+}
+.app-sidebar .app-nav-btn {
+  color: var(--forest-100) !important;
+}
+.app-sidebar .app-nav-btn:hover {
+  background-color: rgba(20,90,28,0.45) !important; /* green-800/70 */
+  color: var(--forest-50) !important;
+}
+.app-sidebar .app-nav-btn.bg-green-800 {
+  background-color: var(--forest-700) !important;
+  color: var(--forest-50) !important;
+}
+
+/* Prominent active state */
+.app-sidebar .app-nav-btn.active {
+  background: linear-gradient(90deg, rgba(20,90,28,0.95), rgba(30,120,40,0.95)) !important;
+  color: var(--forest-50) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 6px 18px rgba(20,90,28,0.25) !important;
+  transform: translateX(0) !important;
+  border-left: 4px solid rgba(255,255,255,0.12) !important;
+}
+
+/* More obvious hover */
+.app-sidebar .app-nav-btn:not(.active):hover {
+  background: linear-gradient(90deg, rgba(20,90,28,0.65), rgba(20,90,28,0.55)) !important;
+  color: var(--forest-50) !important;
+  transform: translateX(6px) !important;
+}
+
+/* Ensure icon color follows text */
+.app-sidebar .app-nav-btn svg {
+  color: inherit !important;
+}
+
+/* Ensure header buttons (profile/notifications) invert correctly */
+.app-header button {
+  background-color: transparent !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  color: var(--forest-50) !important;
+}
+.app-header button:hover {
+  background-color: rgba(255,255,255,0.03) !important;
+}
+
+/* Profile dropdown visibility improvements */
+.profile-dropdown {
+  background: #fff !important;
+  border-color: var(--forest-700) !important;
+  box-shadow: 0 12px 40px rgba(12, 44, 18, 0.35) !important;
+  color: var(--forest-900) !important;
+  min-width: 14rem;
+  z-index: 60 !important;
+}
+.profile-dropdown button {
+  background: transparent !important;
+  color: var(--forest-900) !important;
+}
+.profile-dropdown button:hover {
+  background: var(--forest-50) !important;
+  color: var(--forest-800) !important;
+}
+.profile-dropdown .border-t {
+  border-color: rgba(20,90,28,0.08) !important;
+}
+
+/* Remove outer border of dropdown and emphasize text for profile items */
+.profile-dropdown {
+  border: none !important;
+  padding: 0.25rem !important;
+  background: var(--forest-50) !important;
+}
+.profile-dropdown .profile-action {
+  color: var(--forest-800) !important;
+  font-weight: 600 !important;
+}
+.profile-dropdown .logout-btn {
+  color: #b91c1c !important; /* darker red */
+  font-weight: 700 !important;
+}
+.profile-dropdown .logout-btn:hover {
+  background: rgba(185,28,28,0.06) !important;
+}
+
+/* Notifications 'Show All' stronger text */
+.notifications-showall {
+  color: var(--forest-800) !important;
+  font-weight: 600 !important;
+}
+.notifications-showall:hover {
+  color: var(--forest-900) !important;
+  background: rgba(20,90,28,0.03) !important;
+}
+
+/* Make the Show All Activities button a prominent forest-green button */
+.notifications-showall {
+  display: inline-block;
+  background: var(--forest-700) !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  border-radius: 0 0 0.5rem 0.5rem !important;
+  transition: background-color .15s ease, transform .12s ease;
+}
+.notifications-showall:hover {
+  background: var(--forest-800) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Restore forest-green header/sidebar/profile theme (final override) */
+.app-sidebar {
+  background-color: var(--forest-800) !important;
+  color: var(--forest-50) !important;
+}
+.app-sidebar .app-nav-btn {
+  color: var(--forest-100) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.app-sidebar .app-nav-btn:hover {
+  background-color: rgba(20,90,28,0.45) !important;
+  color: var(--forest-50) !important;
+  transform: translateX(6px) !important;
+}
+.app-sidebar .app-nav-btn.active {
+  background: linear-gradient(90deg, rgba(20,90,28,0.95), rgba(30,120,40,0.95)) !important;
+  color: var(--forest-50) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 6px 18px rgba(20,90,28,0.25) !important;
+  border-left: 4px solid rgba(255,255,255,0.12) !important;
+}
+.app-sidebar .app-nav-btn svg { color: inherit !important; }
+
+.app-header {
+  background-color: var(--forest-700) !important;
+  border-bottom-color: var(--forest-800) !important;
+  color: var(--forest-50) !important;
+}
+.app-header button {
+  background-color: transparent !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  color: var(--forest-50) !important;
+}
+.app-header button:hover {
+  background-color: rgba(255,255,255,0.03) !important;
+}
+
+.profile-dropdown {
+  background: var(--forest-50) !important;
+  border: none !important;
+  box-shadow: 0 12px 40px rgba(12, 44, 18, 0.35) !important;
+  color: var(--forest-900) !important;
+}
+.profile-dropdown .profile-action {
+  color: var(--forest-700) !important;
+  font-weight: 600 !important;
+}
+.profile-dropdown .logout-btn {
+  color: var(--forest-700) !important;
+  font-weight: 700 !important;
+}
+.profile-dropdown .profile-action:hover,
+.profile-dropdown .logout-btn:hover {
+  background: rgba(20,90,28,0.06) !important;
+}
+
+/* Keep Show All Activities colored up only (text colored) */
+.notifications-showall {
+  background: transparent !important;
+  color: var(--forest-700) !important;
+  font-weight: 700 !important;
+  display: block !important;
+  border-radius: 0 !important;
+  transform: none !important;
+}
+.notifications-showall:hover {
+  background: transparent !important;
+  color: var(--forest-800) !important;
+}
+.notifications-showall:active {
+  transform: translateY(0) !important;
+}
+
+/* Notifications dropdown styling to match profile dropdown visibility */
+.notifications-dropdown {
+  background: var(--forest-50) !important;
+  border: none !important;
+  box-shadow: 0 18px 48px rgba(12, 44, 18, 0.38) !important;
+  color: var(--forest-900) !important;
+}
+.notifications-dropdown .px-4.py-3.text-sm.font-semibold.text-gray-900,
+.notifications-dropdown .text-sm.font-semibold.text-gray-900 {
+  color: var(--forest-900) !important;
+}
+.notifications-dropdown .max-h-52.overflow-auto {
+  max-height: 260px !important;
+}
+.notifications-dropdown .px-4.py-2.border-b.border-gray-100 {
+  border-color: rgba(20,90,28,0.06) !important;
+}
+
+/* REVERT: return header/sidebar/dropdowns to original neutral design, keep only Show All text colored */
+.app-sidebar {
+  background-color: #ffffff !important;
+  color: #1f2937 !important; /* text-gray-800 */
+}
+.app-sidebar .app-nav-btn {
+  color: #374151 !important; /* text-gray-700 */
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+  border-left: none !important;
+}
+.app-sidebar .app-nav-btn:hover {
+  background-color: #f8fafc !important; /* gray-50 */
+  color: #111827 !important;
+}
+.app-sidebar .app-nav-btn.active {
+  background: #eef2ff00 !important; /* neutral, remove gradient */
+  color: #111827 !important;
+  box-shadow: none !important;
+  border-left: none !important;
+}
+
+.app-header {
+  background-color: #ffffff !important;
+  border-bottom-color: #e5e7eb !important; /* gray-200 */
+  color: #111827 !important;
+}
+.app-header button {
+  background-color: transparent !important;
+  border-color: #e5e7eb !important;
+  color: #374151 !important;
+}
+.app-header button:hover {
+  background-color: #f8fafc !important;
+}
+
+.profile-dropdown {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06) !important;
+  color: #111827 !important;
+}
+.profile-dropdown .profile-action {
+  color: #374151 !important;
+  font-weight: 500 !important;
+}
+.profile-dropdown .logout-btn {
+  color: #dc2626 !important; /* red-600 */
+  font-weight: 600 !important;
+}
+
+.notifications-dropdown {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* Only color the 'Show All Activities' text — keep it as text, not a solid button */
+.notifications-showall {
+  background: transparent !important;
+  color: var(--forest-700) !important;
+  font-weight: 700 !important;
+  display: block !important;
+  border-radius: 0 !important;
+  transform: none !important;
+}
+.notifications-showall:hover {
+  background: transparent !important;
+  color: var(--forest-800) !important;
+}
+
+
 @property --tw-translate-x {
   syntax: "*";
   inherits: false;

@@ -224,3 +224,315 @@
 html {
   font-size: var(--font-size);
 }
+
+/* Forest green theme overrides for primary blues */
+:root {
+  --forest-50: #e8f5e9;
+  --forest-100: #c8e6c9;
+  --forest-600: #2e7d32;
+  --forest-700: #1b5e20;
+  --forest-800: #145a1c;
+}
+
+.bg-blue-50 { background-color: var(--forest-50) !important; }
+.bg-blue-100 { background-color: var(--forest-100) !important; }
+.bg-blue-600 { background-color: var(--forest-700) !important; }
+.bg-blue-700 { background-color: var(--forest-800) !important; }
+
+.text-blue-600 { color: var(--forest-700) !important; }
+.text-blue-700 { color: var(--forest-800) !important; }
+
+.border-blue-500 { border-color: var(--forest-600) !important; }
+.border-blue-600 { border-color: var(--forest-700) !important; }
+
+.hover\:bg-blue-700:hover { background-color: var(--forest-800) !important; }
+.hover\:bg-blue-600:hover { background-color: var(--forest-700) !important; }
+.hover\:text-blue-700:hover { color: var(--forest-800) !important; }
+.hover\:text-blue-600:hover { color: var(--forest-700) !important; }
+
+.focus\:ring-blue-500:focus {
+  --tw-ring-color: var(--forest-600) !important;
+}
+
+/* Strong, high-specificity forest green button used where Tailwind output may be absent/overridden */
+.btn-forest {
+  background-color: var(--forest-700) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+.btn-forest:hover {
+  background-color: var(--forest-800) !important;
+}
+.btn-forest:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Force forest-green overrides for header and sidebar to beat other rules */
+/* These use high-specificity selectors and !important so they take effect in the app. */
+.app-header, :root .app-header {
+  background-color: var(--forest-700) !important;
+  color: var(--forest-50) !important;
+  border-bottom-color: var(--forest-600) !important;
+}
+
+.app-sidebar, :root .app-sidebar {
+  background-color: var(--forest-800) !important;
+  color: var(--forest-50) !important;
+  border-right-color: var(--forest-600) !important;
+}
+
+.app-sidebar a,
+.app-sidebar button,
+.app-sidebar .nav-item,
+.app-sidebar [role='button'],
+.app-sidebar span {
+  color: #f8fafc !important;
+  text-shadow: none;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.app-sidebar a:hover,
+.app-sidebar button:hover,
+.app-sidebar .nav-item:hover,
+.app-sidebar [role='button']:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  text-shadow: none;
+  box-shadow: none !important;
+  transform: none;
+}
+
+.app-sidebar a:focus-visible,
+.app-sidebar button:focus-visible,
+.app-sidebar .nav-item:focus-visible,
+.app-sidebar [role='button']:focus-visible {
+  outline: 2px solid var(--forest-100) !important;
+  outline-offset: 2px;
+}
+
+.app-sidebar a.active,
+.app-sidebar .nav-item.active,
+.app-sidebar .app-nav-btn.active,
+.app-sidebar [aria-current='page'] {
+  background: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: none;
+  color: #ffffff !important;
+  text-shadow: none;
+  position: relative;
+}
+
+.app-sidebar a.active::before,
+.app-sidebar .nav-item.active::before,
+.app-sidebar .app-nav-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #ffffff;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Sidebar icon + text emphasis on hover/active */
+.app-sidebar .app-nav-btn {
+  position: relative;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  padding: 10px 14px;
+  gap: 10px;
+}
+
+.app-sidebar .app-nav-label {
+  font-size: 13.5px;
+  line-height: 1.2;
+}
+
+.app-sidebar .app-nav-icon {
+  width: 18px;
+  height: 18px;
+  opacity: 0.95;
+}
+
+.app-sidebar .app-nav-btn:hover .app-nav-icon {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  filter: none;
+}
+
+.app-sidebar .app-nav-btn.active .app-nav-icon {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  filter: none;
+}
+
+.app-sidebar svg,
+.app-sidebar .icon {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: #ffffff !important;
+}
+
+.app-header .profile-action, .app-header .notifications-action {
+  color: var(--forest-50) !important;
+}
+
+.app-header button,
+.app-header a,
+.app-header [role='button'],
+.app-header span {
+  color: #ffffff !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+/* ensure sticky header background blends on scroll */
+.app-header.sticky, .app-header.is-stuck {
+  background-color: var(--forest-700) !important;
+}
+
+/* Profile dropdown - white background with black text, no hover effects */
+.profile-dropdown {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+}
+
+.profile-action {
+  color: #000000 !important;
+  background-color: transparent !important;
+  transition: none !important;
+  cursor: pointer;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+.profile-action:hover,
+.profile-action:active,
+.profile-action:focus,
+.profile-action:focus-visible {
+  background-color: transparent !important;
+  color: #000000 !important;
+  transform: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+
+/* Kill the global button hover effects inside the profile dropdown specifically */
+.profile-dropdown :where(button, a, [role='button']) {
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+  transition: none !important;
+}
+
+.profile-dropdown :where(button, a, [role='button']):hover,
+.profile-dropdown :where(button, a, [role='button']):active,
+.profile-dropdown :where(button, a, [role='button']):focus {
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
+
+.logout-btn {
+  color: #000000 !important;
+  background-color: transparent !important;
+  transition: none !important;
+  cursor: pointer;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+.logout-btn:hover,
+.logout-btn:active,
+.logout-btn:focus,
+.logout-btn:focus-visible {
+  background-color: transparent !important;
+  color: #000000 !important;
+  transform: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+
+.profile-dropdown .border-t {
+  border-top-color: #e5e7eb !important;
+}
+
+/* Notifications Show All Activities button - black text, no hover effects */
+.notifications-showall {
+  background-color: transparent !important;
+  color: #000000 !important;
+  font-weight: 500;
+  border-top: 1px solid #e5e7eb !important;
+  transition: none !important;
+  cursor: pointer;
+}
+
+.notifications-showall:hover,
+.notifications-showall:active,
+.notifications-showall:focus {
+  background-color: transparent !important;
+  color: #000000 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Notification dropdown items - black text, no hover effects */
+.notifications-dropdown {
+  background-color: #ffffff !important;
+}
+
+.notifications-dropdown .px-4.py-3:first-child {
+  border-bottom-color: #e5e7eb !important;
+}
+
+.notifications-dropdown .px-4.py-2 {
+  border-bottom-color: #e5e7eb !important;
+  transition: none !important;
+  background-color: transparent !important;
+}
+
+.notifications-dropdown .px-4.py-2:hover {
+  background-color: transparent !important;
+}
+
+.notifications-dropdown .text-sm.text-gray-900 {
+  color: #000000 !important;
+  font-weight: 500;
+}
+
+.notifications-dropdown .text-xs.text-gray-500,
+.notifications-dropdown .text-xs,
+.notifications-dropdown .text-sm,
+.notifications-dropdown .text-gray-500,
+.notifications-dropdown .text-gray-600,
+.notifications-dropdown .text-gray-700,
+.notifications-dropdown .text-red-600 {
+  color: #000000 !important;
+}
+
+.notifications-dropdown button,
+.notifications-dropdown a {
+  color: #000000 !important;
+  background-color: transparent !important;
+  transition: none !important;
+}
+
+.notifications-dropdown button:hover,
+.notifications-dropdown button:active,
+.notifications-dropdown button:focus,
+.notifications-dropdown a:hover,
+.notifications-dropdown a:active,
+.notifications-dropdown a:focus {
+  background-color: transparent !important;
+  color: #000000 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}

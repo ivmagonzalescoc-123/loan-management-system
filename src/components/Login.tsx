@@ -13,6 +13,7 @@ export function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const handleLogin = async () => {
     setError(null);
@@ -28,9 +29,9 @@ export function Login({ onLogin }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mx-auto mb-6 overflow-hidden">
+        <div className="flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mx-auto mb-6 overflow-hidden">
           <img src={logoUrl} alt="Loan Management System logo" className="w-10 h-10 object-contain" />
         </div>
         
@@ -44,7 +45,7 @@ export function Login({ onLogin }: LoginProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@lms.com"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
             />
           </div>
           <div>
@@ -54,9 +55,16 @@ export function Login({ onLogin }: LoginProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
             />
           </div>
+          <button
+            type="button"
+            onClick={() => setShowForgotPassword(true)}
+            className="text-sm text-green-700 hover:text-green-800 text-left"
+          >
+            Forgot password?
+          </button>
           {error && (
             <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
               {error}
@@ -67,11 +75,32 @@ export function Login({ onLogin }: LoginProps) {
         <button
           onClick={handleLogin}
           disabled={loading}
-          className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+          className="w-full btn-forest py-3 rounded-lg transition-colors disabled:opacity-60"
+          style={{ backgroundColor: 'var(--forest-700)', color: '#fff' }}
         >
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
       </div>
+      {showForgotPassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 login-forgot-modal">
+          <div className="bg-white rounded-xl shadow-xl modal-inner p-4">
+            <h3 className="text-gray-900 mb-2">Forgot Password</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Contact your administrator to change your password.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(false)}
+                className="btn-forest py-2 rounded-lg w-full"
+                style={{ backgroundColor: 'var(--forest-700)', color: '#fff' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

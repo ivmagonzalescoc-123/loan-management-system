@@ -239,8 +239,10 @@ export default function App() {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200">
-        <div className="p-6 border-b border-gray-200">
+      <aside
+        className="app-sidebar w-64"
+      >
+        <div className="p-6 border-b border-green-800">
           <div className="flex items-center gap-3">
             <img
               src={logoUrl}
@@ -248,12 +250,12 @@ export default function App() {
               className="w-8 h-8 object-contain"
               loading="eager"
             />
-            <h1 className="font-semibold text-gray-900 leading-tight">
+            <h1 className="font-semibold leading-tight">
               Gonzales LMS
             </h1>
           </div>
 
-          <p className="text-xs text-gray-400 uppercase text-center mt-2">
+          <p className="text-xs uppercase text-center mt-2">
             {currentUser.role.replace("_", " ")}
           </p>
         </div>
@@ -268,32 +270,33 @@ export default function App() {
                   setCurrentView(item.id);
                   setShowProfileMenu(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  currentView === item.id
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-700 hover:bg-gray-50"
+                className={`app-nav-btn w-full flex items-center rounded-lg ${
+                  currentView === item.id ? "active" : ""
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-sm">{item.label}</span>
+                <Icon className="app-nav-icon" />
+                <span className="app-nav-label">{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        <div className="absolute bottom-0 w-64 p-4 border-t border-gray-200" />
+        <div className="absolute bottom-0 w-64 p-4 border-t border-green-800" />
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <div className="sticky top-0 z-30 border-b border-gray-200 bg-white px-6 py-4 flex items-center justify-end gap-3">
+        <div
+          className="app-header sticky top-0 z-40 border-b px-6 flex items-center justify-end gap-3"
+          style={{ height: '64px' }}
+        >
           <div className="relative" ref={notificationsMenuRef}>
             <button
               onClick={handleToggleNotifications}
-              className="relative flex items-center justify-center w-10 h-10 border border-gray-200 rounded-lg hover:bg-gray-50"
+              className="relative flex items-center justify-center w-10 h-10 border border-green-700 rounded-lg"
               aria-label="Open notifications"
             >
-              <Bell className="w-5 h-5 text-gray-600" />
+              <Bell className="w-5 h-5 text-green-100" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
                   {unreadCount > 9 ? "9+" : unreadCount}
@@ -302,18 +305,18 @@ export default function App() {
             </button>
             {showNotificationsMenu && (
               <div
-                className="fixed top-20 -translate-x-1/2 w-[500px] bg-white border border-gray-200 rounded-lg shadow-lg z-50"
-                style={{ left: "calc(50% + 12rem)" }}
+                className="notifications-dropdown fixed top-20 -translate-x-1/2 w-[500px] bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                style={{ left: "calc(50% + 10rem)" }}
               >
                 <div className="px-4 py-3 border-b border-gray-100">
-                  <div className="text-sm font-semibold text-gray-900">
+                  <div className="text-sm font-semibold text-black-100">
                     Notifications
                   </div>
-                  <div className="text-xs text-gray-500">Latest updates</div>
+                  <div className="text-xs text-black">Latest updates</div>
                 </div>
                 <div className="max-h-52 overflow-auto">
                   {headerNotifications.length === 0 ? (
-                    <div className="px-4 py-6 text-sm text-gray-500 text-center">
+                    <div className="px-4 py-6 text-sm text-black text-center">
                       No notifications yet.
                     </div>
                   ) : (
@@ -322,16 +325,16 @@ export default function App() {
                         <div className="flex items-center gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <div className="text-sm text-gray-900 font-medium truncate">
+                              <div className="text-sm text-black font-medium truncate">
                                 {note.title}
                               </div>
                               {note.status === "unread" && (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-black">
                                   New
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-gray-500 truncate">
+                            <div className="text-xs text-black truncate">
                               {note.message}
                             </div>
                           </div>
@@ -345,7 +348,7 @@ export default function App() {
                     setCurrentView("notifications");
                     setShowNotificationsMenu(false);
                   }}
-                  className="w-full text-sm text-blue-600 hover:text-blue-700 px-4 py-3 text-center"
+                  className="notifications-showall w-full text-sm px-4 py-3 text-center text-black"
                 >
                   Show All Activities
                 </button>
@@ -355,7 +358,7 @@ export default function App() {
           <div className="relative" ref={profileMenuRef}>
             <button
               onClick={() => setShowProfileMenu((prev) => !prev)}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
+              className="flex items-center gap-2 px-3 py-2 border border-green-700 rounded-lg width-auto"
             >
               {currentUser.profileImage ? (
                 <img
@@ -364,23 +367,23 @@ export default function App() {
                   className="w-8 h-8 rounded-full object-cover border border-gray-200"
                 />
               ) : (
-                <span className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center border border-gray-200">
+                <span className="w-8 h-8 rounded-full bg-green-800 text-green-100 flex items-center justify-center border border-green-700">
                   <UserIcon className="w-4 h-4" />
                 </span>
               )}
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-green-100">
                 {getLastName(currentUser.name)}
               </span>
             </button>
             {showProfileMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+              <div className="profile-dropdown absolute right-0 mt-2 w-56 bg-white border rounded-lg shadow-lg z-40">
                 <button
                   onClick={() => {
                     setProfileTab("details");
                     setCurrentView("profile");
                     setShowProfileMenu(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="profile-action w-full text-left px-4 py-2 text-sm"
                 >
                   Profile
                 </button>
@@ -390,17 +393,17 @@ export default function App() {
                     setCurrentView("profile");
                     setShowProfileMenu(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="profile-action w-full text-left px-4 py-2 text-sm"
                 >
                   Account
                 </button>
-                <div className="border-t border-gray-200" />
+                <div className="border-t border-green-100" />
                 <button
                   onClick={() => {
                     setShowProfileMenu(false);
                     handleLogout();
                   }}
-                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  className="logout-btn w-full text-left px-4 py-2 text-sm"
                 >
                   Logout
                 </button>
@@ -408,7 +411,7 @@ export default function App() {
             )}
           </div>
         </div>
-        <div className="p-8">
+        <div className="p-8" style={{ paddingTop: '64px' }}>
           {currentView === "dashboard" && (
             <Dashboard user={currentUser} />
           )}
