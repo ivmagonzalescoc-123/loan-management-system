@@ -36,8 +36,7 @@ export type UserRole =
   | "manager"
   | "loan_officer"
   | "cashier"
-  | "borrower"
-  | "auditor";
+  | "borrower";
 
 export interface User {
   id: string;
@@ -175,7 +174,6 @@ export default function App() {
         "manager",
         "loan_officer",
         "cashier",
-        "auditor",
         "borrower",
       ],
     },
@@ -213,13 +211,7 @@ export default function App() {
       id: "reports" as View,
       label: "Reports",
       icon: BarChart3,
-      roles: ["admin", "manager", "auditor", "loan_officer"],
-    },
-    {
-      id: "audit-logs" as View,
-      label: "Audit Logs",
-      icon: Shield,
-      roles: ["admin", "auditor"],
+      roles: ["admin", "manager", "loan_officer"],
     },
 
     {
