@@ -4,6 +4,7 @@ import { BorrowerManagement } from "./components/BorrowerManagement";
 import { LoanApplications } from "./components/LoanApplications";
 import { Disbursements } from "./components/Disbursements";
 import { RepaymentTracking } from "./components/RepaymentTracking";
+import { LoanContinuityActions } from "./components/LoanContinuityActions";
 import { Reports } from "./components/Reports";
 import { Login } from "./components/Login";
 import { UserManagement } from "./components/UserManagement";
@@ -21,6 +22,7 @@ import {
   FileText,
   Wallet,
   CreditCard,
+  Repeat,
   BarChart3,
   UserCog,
   ListChecks,
@@ -57,6 +59,7 @@ type View =
   | "applications"
   | "disbursements"
   | "repayments"
+  | "loan-continuity"
   | "reports"
   | "user-management"
   | "profile"
@@ -209,6 +212,12 @@ export default function App() {
       label: "Repayments",
       icon: CreditCard,
       roles: ["admin", "manager", "cashier", "loan_officer"],
+    },
+    {
+      id: "loan-continuity" as View,
+      label: "Loan Continuity",
+      icon: Repeat,
+      roles: ["admin", "manager"],
     },
     {
       id: "reports" as View,
@@ -436,6 +445,9 @@ export default function App() {
           )}
           {currentView === "repayments" && (
             <RepaymentTracking user={currentUser} />
+          )}
+          {currentView === "loan-continuity" && (
+            <LoanContinuityActions user={currentUser} />
           )}
           {currentView === "reports" && (
             <Reports user={currentUser} />

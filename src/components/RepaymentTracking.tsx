@@ -4,7 +4,6 @@ import { Search, Plus, PhilippinePeso, Calendar, AlertCircle } from 'lucide-reac
 import { createPayment } from '../lib/api';
 import { useLoans, usePayments } from '../lib/useApiData';
 import { formatPhp } from '../lib/currency';
-import { LoanActionsModal } from './LoanActionsModal';
 
 interface RepaymentTrackingProps {
   user: User;
@@ -19,9 +18,7 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
   const [paymentDateFrom, setPaymentDateFrom] = useState('');
   const [paymentDateTo, setPaymentDateTo] = useState('');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [showLoanActions, setShowLoanActions] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<string | null>(null);
-  const [selectedLoanForActions, setSelectedLoanForActions] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -94,11 +91,6 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setPaymentNotes('');
     setShowPaymentForm(true);
-  };
-
-  const handleLoanActions = (loanId: string) => {
-    setSelectedLoanForActions(loanId);
-    setShowLoanActions(true);
   };
 
   return (
@@ -259,14 +251,6 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
                           <Plus className="w-3 h-3" />
                           Payment
                         </button>
-                        {(user.role === 'admin' || user.role === 'manager' || user.role === 'loan_officer') && (
-                          <button
-                            onClick={() => handleLoanActions(loan.id)}
-                            className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200 transition-colors"
-                          >
-                            Actions
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -499,23 +483,6 @@ export function RepaymentTracking({ user }: RepaymentTrackingProps) {
         </div>
       )}
 
-      {showLoanActions && selectedLoanForActions && (
-        (() => {
-          const loan = loans.find((l) => l.id === selectedLoanForActions);
-          if (!loan) return null;
-          return (
-            <LoanActionsModal
-              loan={loan}
-              user={user}
-              onClose={() => setShowLoanActions(false)}
-              onUpdated={() => {
-                refreshLoans();
-                refreshPayments();
-              }}
-            />
-          );
-        })()
-      )}
     </div>
   );
 }

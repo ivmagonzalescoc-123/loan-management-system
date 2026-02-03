@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { X, Repeat, UserCheck, FileCheck, AlertTriangle } from 'lucide-react';
 import { Loan } from '../lib/types';
 import { User } from '../App';
-import { createLoanClosure, createLoanRestructure, createLoanTransfer } from '../lib/api';
+import { createLoanClosure, createLoanRestructure, createLoanTransfer, updateBorrower } from '../lib/api';
 import { useBorrowers } from '../lib/useApiData';
 import { formatPhp } from '../lib/currency';
 
@@ -22,7 +22,7 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
   const [transferStatus, setTransferStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
 
-  const [restructureType, setRestructureType] = useState<'restructure' | 'refinance'>('restructure');
+  const [restructureType] = useState<'restructure'>('restructure');
   const [newTermMonths, setNewTermMonths] = useState(String(loan.termMonths));
   const [newInterestRate, setNewInterestRate] = useState(String(loan.interestRate));
   const [restructureReason, setRestructureReason] = useState('');
@@ -33,7 +33,7 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
   const [closureRemarks, setClosureRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const canApprove = user.role === 'admin' || user.role === 'manager' || user.role === 'loan_officer' || user.role === 'cashier';
+  const canApprove = user.role === 'admin' || user.role === 'manager';
   const borrowerOptions = borrowers.filter(b => b.id !== loan.borrowerId);
 
   const projectedMonthlyPayment = useMemo(() => {
@@ -49,6 +49,8 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
     if (!monthlyRate) return principal / months;
     return (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
   }, [loan, newInterestRate, newTermMonths]);
+
+  const hasOutstandingBalance = Number(loan.outstandingBalance || 0) > 0;
 
   const handleTransfer = async () => {
     if (!transferBorrowerId) {
@@ -118,6 +120,15 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
       return;
     }
 
+    if (hasOutstandingBalance) {
+      const confirmForceClose = window.confirm(
+        'This loan still has an outstanding balance. Closing it will blacklist the borrower. Do you want to proceed?'
+      );
+      if (!confirmForceClose) {
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       await createLoanClosure({
@@ -126,6 +137,9 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
         closedBy: user.name,
         remarks: closureRemarks
       });
+      if (hasOutstandingBalance) {
+        await updateBorrower(loan.borrowerId, { status: 'blacklisted' });
+      }
       onUpdated();
       onClose();
     } catch (error) {
@@ -177,7 +191,7 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
               className={`px-4 py-2 rounded-lg border ${tab === 'restructure' ? 'bg-green-50 border-green-500 text-green-700' : 'border-gray-200 text-gray-700'}`}
             >
               <Repeat className="w-4 h-4 inline-block mr-2" />
-              Restructure / Refinance
+              Restructure
             </button>
             <button
               onClick={() => setTab('close')}
@@ -261,17 +275,6 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Type</label>
-                  <select
-                    value={restructureType}
-                    onChange={(e) => setRestructureType(e.target.value as 'restructure' | 'refinance')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="restructure">Restructure</option>
-                    <option value="refinance">Refinance</option>
-                  </select>
-                </div>
-                <div>
                   <label className="block text-sm text-gray-700 mb-2">Effective Date</label>
                   <input
                     type="date"
@@ -353,10 +356,11 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
 
           {tab === 'close' && (
             <div className="space-y-4">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 mt-0.5" />
-                Closing a loan will finalize the balance and issue a closure certificate.
-              </div>
+              {hasOutstandingBalance && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
+                  Outstanding balance detected. Proceeding will blacklist the borrower. And will be forfeited to reclaim the colateral.
+                </div>
+              )}
               <div>
                 <label className="block text-sm text-gray-700 mb-2">Closure Remarks</label>
                 <textarea
@@ -369,9 +373,9 @@ export function LoanActionsModal({ loan, user, onClose, onUpdated }: LoanActions
               <button
                 onClick={handleClosure}
                 disabled={isSubmitting}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-800 transition-colors"
               >
-                Issue Closure Certificate
+                {hasOutstandingBalance ? 'Force Close & Blacklist' : 'Close Loan'}
               </button>
             </div>
           )}
