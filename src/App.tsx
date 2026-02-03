@@ -355,7 +355,7 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="relative" ref={profileMenuRef}>
+          <div className="relative inline-flex" ref={profileMenuRef}>
             <button
               onClick={() => setShowProfileMenu((prev) => !prev)}
               className="flex items-center gap-2 px-3 py-2 border border-green-700 rounded-lg width-auto"
@@ -376,14 +376,14 @@ export default function App() {
               </span>
             </button>
             {showProfileMenu && (
-              <div className="profile-dropdown absolute right-0 mt-2 w-56 bg-white border rounded-lg shadow-lg z-40">
+              <div className="profile-dropdown absolute right-0 top-full mt-2 w-full bg-white border rounded-lg shadow-lg z-40 flex flex-col">
                 <button
                   onClick={() => {
                     setProfileTab("details");
                     setCurrentView("profile");
                     setShowProfileMenu(false);
                   }}
-                  className="profile-action w-full text-left px-4 py-2 text-sm"
+                  className="profile-action text-left px-4 py-2 text-sm whitespace-nowrap"
                 >
                   Profile
                 </button>
@@ -393,7 +393,7 @@ export default function App() {
                     setCurrentView("profile");
                     setShowProfileMenu(false);
                   }}
-                  className="profile-action w-full text-left px-4 py-2 text-sm"
+                  className="profile-action text-left px-4 py-2 text-sm whitespace-nowrap"
                 >
                   Account
                 </button>
@@ -403,7 +403,7 @@ export default function App() {
                     setShowProfileMenu(false);
                     handleLogout();
                   }}
-                  className="logout-btn w-full text-left px-4 py-2 text-sm"
+                  className="logout-btn text-left px-4 py-2 text-sm whitespace-nowrap"
                 >
                   Logout
                 </button>

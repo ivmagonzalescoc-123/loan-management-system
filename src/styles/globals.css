@@ -271,9 +271,9 @@ html {
 /* Force forest-green overrides for header and sidebar to beat other rules */
 /* These use high-specificity selectors and !important so they take effect in the app. */
 .app-header, :root .app-header {
-  background-color: var(--forest-700) !important;
-  color: var(--forest-50) !important;
-  border-bottom-color: var(--forest-600) !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-bottom-color: #e5e7eb !important;
 }
 
 .app-sidebar, :root .app-sidebar {
@@ -377,28 +377,58 @@ html {
 }
 
 .app-header .profile-action, .app-header .notifications-action {
-  color: var(--forest-50) !important;
+  color: #000000 !important;
 }
 
 .app-header button,
 .app-header a,
 .app-header [role='button'],
 .app-header span {
-  color: #ffffff !important;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  color: #0f172a !important;
+  text-shadow: none;
+}
+
+.app-header button {
+  background-color: #ffffff !important;
+  border-color: var(--forest-700) !important;
+  color: var(--forest-700) !important;
+}
+
+.app-header button:hover,
+.app-header button:active,
+.app-header button:focus,
+.app-header button:focus-visible {
+  background-color: #ffffff !important;
+  color: var(--forest-700) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.app-header button svg {
+  color: var(--forest-700) !important;
+  stroke: var(--forest-700) !important;
 }
 
 /* ensure sticky header background blends on scroll */
 .app-header.sticky, .app-header.is-stuck {
-  background-color: var(--forest-700) !important;
+  background-color: #ffffff !important;
 }
 
 /* Profile dropdown - white background with black text, no hover effects */
 .profile-dropdown {
+  position: absolute;
+  top: 100%; /* places it directly below the button */
+  left: 0;   /* aligns with the left edge of the button */
   background-color: #ffffff !important;
-  border-color: #d1d5db !important;
+  border: 1px solid #d1d5db !important;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 100px; /* adjust as needed */
+  z-index: 1000; /* ensures it appears above other elements */
 }
+
 
 .profile-action {
   color: #000000 !important;
@@ -408,6 +438,7 @@ html {
   transform: none !important;
   filter: none !important;
   box-shadow: none !important;
+  display: block;
 }
 
 .profile-action:hover,
@@ -447,6 +478,7 @@ html {
   transform: none !important;
   filter: none !important;
   box-shadow: none !important;
+  display: block;
 }
 
 .logout-btn:hover,
