@@ -76,6 +76,7 @@ type View =
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<View>("dashboard");
+  const [permissionsKey, setPermissionsKey] = useState(0);
   const [profileTab, setProfileTab] = useState<"details" | "security">(
     "details",
   );
@@ -198,8 +199,15 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     setCurrentView("dashboard");
+    setPermissionsKey((prev) => prev + 1);
     clearSession();
   };
+
+  useEffect(() => {
+    if (currentView !== "permissions") {
+      setPermissionsKey((prev) => prev + 1);
+    }
+  }, [currentView]);
 
   if (!currentUser) {
     return <Login onLogin={handleLogin} />;
@@ -540,6 +548,7 @@ export default function App() {
           )}
           {currentView === "permissions" && (
             <PermissionSettings
+              key={`permissions-${permissionsKey}`}
               onUpdated={(next) => setPermissionSettings(next)}
             />
           )}
