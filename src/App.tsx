@@ -411,7 +411,7 @@ export default function App() {
             )}
           </div>
         </div>
-        <div className="p-8" style={{ paddingTop: '64px' }}>
+        <div className="app-content p-8" style={{ paddingTop: '64px' }}>
           {currentView === "dashboard" && (
             <Dashboard user={currentUser} />
           )}

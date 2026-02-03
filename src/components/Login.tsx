@@ -31,9 +31,9 @@ export function Login({ onLogin }: LoginProps) {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4"
-      style={{ backgroundColor: 'var(--forest-700)' }}
+      style={{ backgroundColor: '#ffffff' }}
     >
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+      <div className="bg-gray-10 rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mx-auto mb-6 overflow-hidden">
           <img src={logoUrl} alt="Loan Management System logo" className="w-10 h-10 object-contain" />
         </div>
@@ -64,7 +64,7 @@ export function Login({ onLogin }: LoginProps) {
           <button
             type="button"
             onClick={() => setShowForgotPassword(true)}
-            className="text-sm text-green-700 hover:text-green-800 text-left"
+            className="text-sm text-green-700 hover:text-green-800 text-center w-full mb-2"
           >
             Forgot password?
           </button>

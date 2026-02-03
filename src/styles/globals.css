@@ -297,7 +297,7 @@ html {
 .app-sidebar button:hover,
 .app-sidebar .nav-item:hover,
 .app-sidebar [role='button']:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.18) !important;
   color: #ffffff !important;
   text-shadow: none;
   box-shadow: none !important;
@@ -344,6 +344,12 @@ html {
   letter-spacing: 0.2px;
   padding: 10px 14px;
   gap: 10px;
+}
+
+.app-content {
+  font-family: inherit;
+  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 
 .app-sidebar .app-nav-label {
