@@ -460,7 +460,6 @@ export function UserManagement({ user }: UserManagementProps) {
                     <option value="loan_officer">Loan Officer</option>
                     <option value="cashier">Cashier</option>
                     <option value="borrower">Borrower</option>
-                    <option value="auditor">Auditor</option>
                   </select>
                 </div>
                 <div>

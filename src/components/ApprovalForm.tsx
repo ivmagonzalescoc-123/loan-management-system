@@ -19,8 +19,7 @@ export function ApprovalForm({ application, user, onClose, onApprove, onReject }
     manager: 'manager',
     loan_officer: 'loan_officer',
     cashier: 'loan_officer',
-    borrower: 'loan_officer',
-    auditor: 'loan_officer'
+    borrower: 'loan_officer'
   };
   const canSelectStage = false;
   const defaultStage = roleStageMap[user.role] || 'loan_officer';

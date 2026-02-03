@@ -142,7 +142,7 @@ export interface CreatePaymentPayload {
 }
 
 export interface CreateLoanApprovalPayload {
-  approvalStage: 'loan_officer' | 'cashier' | 'manager' | 'auditor';
+  approvalStage: 'loan_officer' | 'cashier' | 'manager';
   decision: 'approved' | 'rejected';
   decidedBy: string;
   decidedById?: string;
@@ -195,7 +195,7 @@ export interface LoginResponse {
   address?: string;
   dateOfBirth?: string;
   profileImage?: string;
-  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
+  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower';
 }
 
 export interface CreateUserPayload {
@@ -206,7 +206,7 @@ export interface CreateUserPayload {
   address?: string;
   dateOfBirth?: string;
   profileImage?: string;
-  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
+  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower';
   status?: 'active' | 'inactive' | 'archived';
 }
 
@@ -218,7 +218,7 @@ export interface UpdateUserPayload {
   address?: string;
   dateOfBirth?: string;
   profileImage?: string;
-  role?: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
+  role?: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower';
   status?: 'active' | 'inactive' | 'archived';
   archivedAt?: string | null;
 }

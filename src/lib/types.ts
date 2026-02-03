@@ -98,7 +98,7 @@ export interface Payment {
 export interface LoanApproval {
   id: string;
   applicationId: string;
-  approvalStage: 'loan_officer' | 'cashier' | 'manager' | 'auditor';
+  approvalStage: 'loan_officer' | 'cashier' | 'manager';
   decision: 'approved' | 'rejected';
   decidedBy: string;
   decidedById?: string | null;
@@ -112,7 +112,7 @@ export interface Notification {
   loanId?: string | null;
   actorName?: string | null;
   actorProfileImage?: string | null;
-  targetRole?: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor' | null;
+  targetRole?: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | null;
   type:
     | 'payment_due'
     | 'payment_overdue'
@@ -220,7 +220,7 @@ export interface AppUser {
   address?: string;
   dateOfBirth?: string;
   profileImage?: string;
-  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower' | 'auditor';
+  role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower';
   createdAt: string;
   status?: 'active' | 'inactive' | 'archived';
   archivedAt?: string | null;

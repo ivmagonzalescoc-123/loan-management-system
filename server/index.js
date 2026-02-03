@@ -323,16 +323,6 @@ const runDelinquencyProcessing = async () => {
         severity,
         referenceKey: `${referenceKey}-admin`
       });
-
-      await createNotification({
-        targetRole: 'auditor',
-        loanId: loan.id,
-        type: 'payment_overdue',
-        title: `${threshold} Days Delinquent`,
-        message: `${loan.borrowerName} is ${threshold} days delinquent.`,
-        severity,
-        referenceKey: `${referenceKey}-auditor`
-      });
     }
 
     if (daysLate >= 180) {
@@ -1103,15 +1093,6 @@ app.patch('/api/loan-applications/:id', async (req, res) => {
             severity: 'info',
             referenceKey: `app-${id}-admin-approved`
           });
-
-          await createNotification({
-            targetRole: 'auditor',
-            type: 'approval_completed',
-            title: 'Loan approved',
-            message: `${application.borrowerName} was approved for ${application.loanType}.`,
-            severity: 'info',
-            referenceKey: `app-${id}-auditor-approved`
-          });
         }
 
         if (payload.status === 'rejected') {
@@ -1289,17 +1270,6 @@ app.post('/api/loan-applications/:id/approvals', async (req, res) => {
           severity: 'info',
           referenceKey: `app-${applicationId}-admin-approved`
         });
-
-        await createNotification({
-          actorName: payload.decidedBy || null,
-          actorProfileImage: actorProfile?.profileImage || null,
-          targetRole: 'auditor',
-          type: 'approval_completed',
-          title: 'Loan approved',
-          message: `${application.borrowerName} was approved for ${application.loanType}.`,
-          severity: 'info',
-          referenceKey: `app-${applicationId}-auditor-approved`
-        });
       }
 
       if (decision === 'rejected') {
@@ -1324,17 +1294,6 @@ app.post('/api/loan-applications/:id/approvals', async (req, res) => {
           message: `${application.borrowerName} was rejected for ${application.loanType}.`,
           severity: 'warning',
           referenceKey: `app-${applicationId}-admin-rejected`
-        });
-
-        await createNotification({
-          actorName: payload.decidedBy || null,
-          actorProfileImage: actorProfile?.profileImage || null,
-          targetRole: 'auditor',
-          type: 'loan_rejected',
-          title: 'Loan application rejected',
-          message: `${application.borrowerName} was rejected for ${application.loanType}.`,
-          severity: 'warning',
-          referenceKey: `app-${applicationId}-auditor-rejected`
         });
       }
     }
@@ -1605,18 +1564,6 @@ app.post('/api/loans', async (req, res) => {
       referenceKey: `loan-${id}-admin-disbursed`
     });
 
-    await createNotification({
-      targetRole: 'auditor',
-      loanId: id,
-      actorName: payload.disbursedBy || null,
-      actorProfileImage: disburserProfile?.profileImage || null,
-      type: 'loan_disbursed',
-      title: 'Loan disbursed',
-      message: `Loan for ${payload.borrowerName} was disbursed.`,
-      severity: 'info',
-      referenceKey: `loan-${id}-auditor-disbursed`
-    });
-
     const scoreResult = await computeBorrowerScore(payload.borrowerId);
     if (scoreResult) {
       await runExecute('UPDATE borrowers SET creditScore = ? WHERE id = ?', [scoreResult.score, payload.borrowerId]);
@@ -1736,16 +1683,6 @@ app.post('/api/payments', async (req, res) => {
       message: `${loan.borrowerName} made a payment of ${payload.amount}.`,
       severity: status === 'late' ? 'warning' : 'info',
       referenceKey: `payment-${id}-manager`
-    });
-
-    await createNotification({
-      targetRole: 'auditor',
-      loanId: loan.id,
-      type: 'payment_received',
-      title: 'Payment received',
-      message: `${loan.borrowerName} made a payment of ${payload.amount}.`,
-      severity: status === 'late' ? 'warning' : 'info',
-      referenceKey: `payment-${id}-auditor`
     });
 
     const borrowerId = loan.borrowerId;
