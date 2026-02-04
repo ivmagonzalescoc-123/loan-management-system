@@ -1761,27 +1761,45 @@ html {
   border-color: rgba(20,90,28,0.06) !important;
 }
 
-/* REVERT: return header/sidebar/dropdowns to original neutral design, keep only Show All text colored */
+/* FINAL: Admin sidebar should be forest-green with white buttons.
+   Default buttons: light green w/ white text.
+   Hover + Active must match: white background + black text/icons. */
 .app-sidebar {
-  background-color: #ffffff !important;
-  color: #1f2937 !important; /* text-gray-800 */
+  background-color: var(--forest-800) !important;
+  color: #ffffff !important;
 }
-.app-sidebar .app-nav-btn {
-  color: #374151 !important; /* text-gray-700 */
-  background: transparent !important;
+
+.app-sidebar .app-nav-btn,
+.app-sidebar .app-nav-sub-btn {
+  background: var(--forest-600) !important;
+  background-color: var(--forest-600) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
   box-shadow: none !important;
   transform: none !important;
   border-left: none !important;
+  border-radius: 10px !important;
 }
-.app-sidebar .app-nav-btn:hover {
-  background-color: #f8fafc !important; /* gray-50 */
+
+.app-sidebar .app-nav-btn:hover,
+.app-sidebar .app-nav-btn.active,
+.app-sidebar .app-nav-sub-btn:hover,
+.app-sidebar .app-nav-sub-btn.active {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
   color: #111827 !important;
+  border-color: rgba(17, 24, 39, 0.14) !important;
+  transform: none !important;
 }
-.app-sidebar .app-nav-btn.active {
-  background: #eef2ff00 !important; /* neutral, remove gradient */
-  color: #111827 !important;
-  box-shadow: none !important;
-  border-left: none !important;
+
+.app-sidebar .app-nav-btn.active,
+.app-sidebar .app-nav-sub-btn.active {
+  font-weight: 600 !important;
+}
+
+.app-sidebar .app-nav-btn svg,
+.app-sidebar .app-nav-sub-btn svg {
+  color: inherit !important;
 }
 
 .app-header {

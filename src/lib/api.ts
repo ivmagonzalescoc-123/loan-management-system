@@ -265,6 +265,12 @@ export const getNotifications = () =>
 export const markNotificationRead = (id: string) =>
   apiPost<{ ok: true }>(`/notifications/${id}/read`, {});
 
+export const sendAlertReminder = (payload: {
+  borrowerId: string;
+  loanId: string;
+  monthsDue: number;
+}) => apiPost<{ ok: true }>(`/alerts/remind`, payload);
+
 export const loginUser = (payload: LoginPayload) =>
   apiPost<LoginResponse>('/login', payload);
 

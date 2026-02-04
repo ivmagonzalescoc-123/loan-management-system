@@ -268,28 +268,20 @@ html {
   cursor: not-allowed !important;
 }
 
-/* Force forest-green overrides for header and sidebar to beat other rules */
-/* These use high-specificity selectors and !important so they take effect in the app. */
+/* Header overrides (keep neutral header) */
 .app-header, :root .app-header {
   background-color: #ffffff !important;
   color: #000000 !important;
   border-bottom-color: #e5e7eb !important;
 }
 
-.app-sidebar, :root .app-sidebar {
-  background-color: var(--forest-800) !important;
-  color: var(--forest-50) !important;
-  border-right-color: var(--forest-600) !important;
-}
-
+/* Sidebar should follow the neutral palette defined in src/index.css. */
 .app-sidebar a,
 .app-sidebar button,
 .app-sidebar .nav-item,
 .app-sidebar [role='button'],
 .app-sidebar span {
-  color: #f8fafc !important;
   text-shadow: none;
-  border-radius: 10px;
   font-weight: 500;
 }
 
@@ -297,11 +289,22 @@ html {
 .app-sidebar button:hover,
 .app-sidebar .nav-item:hover,
 .app-sidebar [role='button']:hover {
-  background: rgba(255, 255, 255, 0.18) !important;
-  color: #ffffff !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #111827 !important;
   text-shadow: none;
   box-shadow: none !important;
   transform: none;
+}
+
+/* Ensure main nav hover isn't overridden by earlier :not(.active):hover rules */
+.app-sidebar .app-nav-btn:not(.active):hover,
+.app-sidebar .app-nav-sub-btn:not(.active):hover {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .app-sidebar a:focus-visible,
@@ -316,24 +319,25 @@ html {
 .app-sidebar .nav-item.active,
 .app-sidebar .app-nav-btn.active,
 .app-sidebar [aria-current='page'] {
-  background: rgba(255, 255, 255, 0.16) !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
   box-shadow: none;
-  color: #ffffff !important;
+  color: #111827 !important;
   text-shadow: none;
   position: relative;
+}
+
+.app-sidebar .app-nav-btn.active,
+.app-sidebar .app-nav-sub-btn.active {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #111827 !important;
 }
 
 .app-sidebar a.active::before,
 .app-sidebar .nav-item.active::before,
 .app-sidebar .app-nav-btn.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background-color: #ffffff;
-  border-radius: 0 4px 4px 0;
+  content: none;
 }
 
 /* Sidebar icon + text emphasis on hover/active */
@@ -343,6 +347,15 @@ html {
   font-weight: 500;
   letter-spacing: 0.2px;
   padding: 10px 14px;
+  gap: 10px;
+}
+
+.app-sidebar .app-nav-sub-btn {
+  position: relative;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  padding: 8px 14px 8px 30px;
   gap: 10px;
 }
 
@@ -361,8 +374,13 @@ html {
   width: 18px;
   height: 18px;
   opacity: 0.95;
-  color: #ffffff !important;
-  stroke: #ffffff !important;
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+
+.app-sidebar .app-nav-sub-btn .app-nav-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .app-sidebar .app-nav-btn .app-nav-icon {

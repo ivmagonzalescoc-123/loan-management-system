@@ -198,8 +198,13 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
                 >
                   <option value="">-- Select Borrower --</option>
                   {borrowers.map(borrower => (
-                    <option key={borrower.id} value={borrower.id}>
+                    <option
+                      key={borrower.id}
+                      value={borrower.id}
+                      disabled={borrower.status === 'blacklisted'}
+                    >
                       {borrower.firstName} {borrower.lastName} ({borrower.id}) - Credit Score: {borrower.creditScore}
+                      {borrower.status === 'blacklisted' ? ' - Blacklisted' : ''}
                     </option>
                   ))}
                 </select>

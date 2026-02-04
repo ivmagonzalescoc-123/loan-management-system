@@ -1381,6 +1381,40 @@ app.post('/api/notifications/:id/read', async (req, res) => {
   }
 });
 
+app.post('/api/alerts/remind', async (req, res) => {
+  try {
+    const { borrowerId, loanId, monthsDue } = req.body || {};
+    if (!borrowerId || !loanId) {
+      return res.status(400).send('Missing borrowerId or loanId.');
+    }
+
+    const loanRows = await runQuery(
+      'SELECT id, borrowerId, borrowerName, nextDueDate FROM loans WHERE id = ? LIMIT 1',
+      [loanId]
+    );
+    const loan = loanRows[0];
+    if (!loan) {
+      return res.status(404).send('Loan not found.');
+    }
+
+    const dueLabel = monthsDue ? `${monthsDue} month(s)` : 'several months';
+    await createNotification({
+      borrowerId: loan.borrowerId,
+      loanId: loan.id,
+      targetRole: 'borrower',
+      type: 'payment_due',
+      title: 'Payment reminder',
+      message: `Your loan payment is overdue by ${dueLabel}. Please settle your balance.`,
+      severity: 'warning',
+      referenceKey: `manual-reminder-${loan.id}-${monthsDue || 'na'}-${Date.now()}`
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
 app.get('/api/loans', async (req, res) => {
   try {
     const rows = await runQuery(

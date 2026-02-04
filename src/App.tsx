@@ -14,8 +14,10 @@ import { UserProfile } from "./components/UserProfile";
 import { BorrowerLoanHistory } from "./components/BorrowerLoanHistory";
 import { BorrowerPaymentHistory } from "./components/BorrowerPaymentHistory";
 import { NotificationsCenter } from "./components/NotificationsCenter";
+import { AlertsCenter } from "./components/AlertsCenter.tsx";
 import { AuditLogs } from "./components/AuditLogs";
 import { SystemLogs } from "./components/SystemLogs";
+import { WalletPage } from "./components/WalletPage.tsx";
 import logoUrl from "../logo.png";
 import {
   LayoutDashboard,
@@ -32,6 +34,7 @@ import {
   Bell,
   Shield,
   Monitor,
+  ChevronDown,
   User as UserIcon,
 } from "lucide-react";
 import { markNotificationRead } from "./lib/api";
@@ -63,6 +66,8 @@ type View =
   | "disbursements"
   | "repayments"
   | "loan-continuity"
+  | "wallet"
+  | "alerts"
   | "reports"
   | "permissions"
   | "user-management"
@@ -83,6 +88,11 @@ export default function App() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   const [permissionSettings, setPermissionSettings] = useState<PermissionSettingsState>(() => getPermissionSettings());
+  const [openNavGroups, setOpenNavGroups] = useState({
+    "loan-management": false,
+    finance: false,
+    security: false,
+  });
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const notificationsMenuRef = useRef<HTMLDivElement | null>(null);
   const idleTimeoutRef = useRef<number | null>(null);
@@ -214,18 +224,22 @@ export default function App() {
   }
 
   const isBorrower = currentUser.role === "borrower";
+  const isAdmin = currentUser.role === "admin";
   const borrowerLoanIds = new Set(
     loans
       .filter((loan) => loan.borrowerId === currentUser.id)
       .map((loan) => loan.id),
   );
-  const visibleNotifications = isBorrower
-    ? notifications.filter(
-        (note) =>
-          (note.borrowerId && note.borrowerId === currentUser.id) ||
-          (note.loanId && borrowerLoanIds.has(note.loanId)),
-      )
-    : notifications;
+  const visibleNotifications = notifications.filter((note) => {
+    if (note.targetRole && note.targetRole !== currentUser.role) {
+      return false;
+    }
+    if (!isBorrower) return true;
+    return (
+      (note.borrowerId && note.borrowerId === currentUser.id) ||
+      (note.loanId && borrowerLoanIds.has(note.loanId))
+    );
+  });
   const sortedNotifications = [...visibleNotifications].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
@@ -266,6 +280,12 @@ export default function App() {
       ],
     },
     {
+      id: "alerts" as View,
+      label: "Alerts",
+      icon: Bell,
+      roles: ["manager", "loan_officer", "cashier"],
+    },
+    {
       id: "borrowers" as View,
       label: "Borrowers",
       icon: Users,
@@ -288,6 +308,12 @@ export default function App() {
       label: "Repayments",
       icon: CreditCard,
       roles: ["admin", "manager", "cashier", "loan_officer"],
+    },
+    {
+      id: "wallet" as View,
+      label: "Wallet",
+      icon: Wallet,
+      roles: ["manager"],
     },
     {
       id: "loan-continuity" as View,
@@ -339,6 +365,104 @@ export default function App() {
     },
   ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings));
 
+  const adminPrimaryItems = [
+    {
+      id: "dashboard" as View,
+      label: "Dashboard",
+      icon: LayoutDashboard,
+    },
+  ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings));
+
+  const adminAlertsItem = [
+    {
+      id: "alerts" as View,
+      label: "Alerts",
+      icon: Bell,
+    },
+  ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings));
+
+  const adminSecondaryItems = [
+    {
+      id: "reports" as View,
+      label: "Reports",
+      icon: BarChart3,
+    },
+    {
+      id: "user-management" as View,
+      label: "User Management",
+      icon: UserCog,
+    },
+  ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings));
+
+  const adminNavGroups = [
+    {
+      id: "loan-management" as const,
+      label: "Loan Management",
+      icon: FileText,
+      items: [
+        {
+          id: "applications" as View,
+          label: "Loan Applications",
+          icon: FileText,
+        },
+        {
+          id: "borrowers" as View,
+          label: "Borrowers",
+          icon: Users,
+        },
+        {
+          id: "loan-continuity" as View,
+          label: "Loan Continuity",
+          icon: Repeat,
+        },
+      ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings)),
+    },
+    {
+      id: "finance" as const,
+      label: "Finance",
+      icon: Wallet,
+      items: [
+        {
+          id: "disbursements" as View,
+          label: "Disbursements",
+          icon: Wallet,
+        },
+        {
+          id: "repayments" as View,
+          label: "Repayments",
+          icon: CreditCard,
+        },
+        {
+          id: "wallet" as View,
+          label: "Wallet",
+          icon: Wallet,
+        },
+      ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings)),
+    },
+    {
+      id: "security" as const,
+      label: "Security",
+      icon: Shield,
+      items: [
+        {
+          id: "permissions" as View,
+          label: "Permissions",
+          icon: Shield,
+        },
+        {
+          id: "audit-logs" as View,
+          label: "Audit Logs",
+          icon: ClipboardList,
+        },
+        {
+          id: "system-logs" as View,
+          label: "System Logs",
+          icon: Monitor,
+        },
+      ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings)),
+    },
+  ];
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -364,28 +488,205 @@ export default function App() {
         </div>
 
         <nav className="p-4 space-y-1">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const iconColor = "text-white";
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setCurrentView(item.id);
-                  setShowProfileMenu(false);
-                }}
-                className={`app-nav-btn w-full flex items-center rounded-lg ${
-                  currentView === item.id ? "active" : ""
-                }`}
-              >
-                <Icon
-                  className={`app-nav-icon ${iconColor}`}
-                  strokeWidth={1.5}
-                />
-                <span className="app-nav-label">{item.label}</span>
-              </button>
-            );
-          })}
+          {isAdmin ? (
+            <>
+              {adminPrimaryItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentView(item.id);
+                      setShowProfileMenu(false);
+                    }}
+                    className={`app-nav-btn w-full flex items-center justify-start text-left rounded-lg ${
+                      currentView === item.id ? "active" : ""
+                    }`}
+                  >
+                    <Icon
+                      className="app-nav-icon"
+                      strokeWidth={1.5}
+                    />
+                    <span className="app-nav-label">{item.label}</span>
+                  </button>
+                );
+              })}
+
+              {adminNavGroups.slice(0, 2).map((group) => {
+                if (group.items.length === 0) return null;
+                const GroupIcon = group.icon;
+                const isOpen = openNavGroups[group.id];
+                return (
+                  <div key={group.id} className="space-y-1">
+                    <button
+                      onClick={() =>
+                        setOpenNavGroups((prev) => {
+                          const nextOpen = !prev[group.id];
+                          return {
+                            "loan-management": false,
+                            finance: false,
+                            security: false,
+                            [group.id]: nextOpen,
+                          };
+                        })
+                      }
+                      className="app-nav-btn w-full flex items-center justify-start text-left rounded-lg"
+                      aria-expanded={isOpen}
+                      aria-controls={`nav-${group.id}`}
+                    >
+                      <GroupIcon className="app-nav-icon" strokeWidth={1.5} />
+                      <span className="app-nav-label flex-1">{group.label}</span>
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${
+                          isOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {isOpen && (
+                      <div id={`nav-${group.id}`} className="ml-2 space-y-1">
+                        {group.items.map((item) => {
+                          const ItemIcon = item.icon;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setCurrentView(item.id);
+                                setShowProfileMenu(false);
+                              }}
+                              className={`app-nav-sub-btn w-full flex items-center justify-start text-left rounded-lg ${
+                                currentView === item.id ? "active" : ""
+                              }`}
+                            >
+                              <ItemIcon className="app-nav-icon" strokeWidth={1.5} />
+                              <span className="app-nav-label">{item.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {adminAlertsItem.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentView(item.id);
+                      setShowProfileMenu(false);
+                    }}
+                    className={`app-nav-btn w-full flex items-center justify-start text-left rounded-lg ${
+                      currentView === item.id ? "active" : ""
+                    }`}
+                  >
+                    <Icon className="app-nav-icon" strokeWidth={1.5} />
+                    <span className="app-nav-label">{item.label}</span>
+                  </button>
+                );
+              })}
+
+              {adminSecondaryItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentView(item.id);
+                      setShowProfileMenu(false);
+                    }}
+                    className={`app-nav-btn w-full flex items-center justify-start text-left rounded-lg ${
+                      currentView === item.id ? "active" : ""
+                    }`}
+                  >
+                    <Icon className="app-nav-icon" strokeWidth={1.5} />
+                    <span className="app-nav-label">{item.label}</span>
+                  </button>
+                );
+              })}
+
+              {adminNavGroups.slice(2).map((group) => {
+                if (group.items.length === 0) return null;
+                const GroupIcon = group.icon;
+                const isOpen = openNavGroups[group.id];
+                return (
+                  <div key={group.id} className="space-y-1">
+                    <button
+                      onClick={() =>
+                        setOpenNavGroups((prev) => {
+                          const nextOpen = !prev[group.id];
+                          return {
+                            "loan-management": false,
+                            finance: false,
+                            security: false,
+                            [group.id]: nextOpen,
+                          };
+                        })
+                      }
+                      className="app-nav-btn w-full flex items-center justify-start text-left rounded-lg"
+                      aria-expanded={isOpen}
+                      aria-controls={`nav-${group.id}`}
+                    >
+                      <GroupIcon className="app-nav-icon" strokeWidth={1.5} />
+                      <span className="app-nav-label flex-1">{group.label}</span>
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${
+                          isOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {isOpen && (
+                      <div id={`nav-${group.id}`} className="ml-2 space-y-1">
+                        {group.items.map((item) => {
+                          const ItemIcon = item.icon;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setCurrentView(item.id);
+                                setShowProfileMenu(false);
+                              }}
+                              className={`app-nav-sub-btn w-full flex items-center justify-start text-left rounded-lg ${
+                                currentView === item.id ? "active" : ""
+                              }`}
+                            >
+                              <ItemIcon className="app-nav-icon" strokeWidth={1.5} />
+                              <span className="app-nav-label">{item.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            menuItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setCurrentView(item.id);
+                    setShowProfileMenu(false);
+                  }}
+                  className={`app-nav-btn w-full flex items-center justify-start text-left rounded-lg ${
+                    currentView === item.id ? "active" : ""
+                  }`}
+                >
+                  <Icon
+                    className="app-nav-icon"
+                    strokeWidth={1.5}
+                  />
+                  <span className="app-nav-label">{item.label}</span>
+                </button>
+              );
+            })
+          )}
         </nav>
 
         <div className="absolute bottom-0 w-64 p-4 border-t border-green-800" />
@@ -539,6 +840,12 @@ export default function App() {
           )}
           {currentView === "repayments" && (
             <RepaymentTracking user={currentUser} />
+          )}
+          {currentView === "wallet" && (
+            <WalletPage user={currentUser} />
+          )}
+          {currentView === "alerts" && (
+            <AlertsCenter user={currentUser} />
           )}
           {currentView === "loan-continuity" && (
             <LoanContinuityActions user={currentUser} />
