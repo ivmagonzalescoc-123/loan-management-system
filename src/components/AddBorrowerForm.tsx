@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, User, Briefcase, PhilippinePeso, Home, Shield } from 'lucide-react';
 import { createBorrower } from '../lib/api';
+import { PrivacyNoticeModal } from './PrivacyNoticeModal';
 
 interface AddBorrowerFormProps {
   onClose: () => void;
@@ -11,6 +12,7 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
   const [step, setStep] = useState(1);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<{ face?: string; id?: string }>({});
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
   const [formData, setFormData] = useState({
     // Personal Information
     firstName: '',
@@ -72,12 +74,15 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
     // Additional
     emergencyContactName: '',
     emergencyContactPhone: '',
-    emergencyContactRelationship: ''
+    emergencyContactRelationship: '',
+    consentGiven: false
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const target = e.target as HTMLInputElement;
+    const nextValue = target.type === 'checkbox' ? target.checked : value;
+    setFormData(prev => ({ ...prev, [name]: nextValue }));
   };
 
   const MAX_IMAGE_SIZE_MB = 2;
@@ -126,6 +131,11 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
   };
 
   const handleSubmit = async () => {
+    if (!formData.consentGiven) {
+      alert('Borrower consent is required before registration.');
+      return;
+    }
+
     const address = [formData.address, formData.city, formData.state, formData.zipCode, formData.country]
       .filter(Boolean)
       .join(', ');
@@ -144,6 +154,8 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
         address: address || 'Not provided',
         employment: employment || 'Not provided',
         monthlyIncome: parseFloat(formData.monthlyIncome) || 0,
+        consentGiven: true,
+        consentPurpose: 'Borrower registration, loan processing, and internal credit scoring',
         bankName: formData.bankName || undefined,
         accountNumber: formData.accountNumber || undefined,
         accountType: formData.accountType || undefined,
@@ -919,6 +931,29 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
                 <p className="text-sm text-blue-900">
                   By submitting this form, you confirm that all information provided is accurate and complete. The system will calculate an initial credit score based on the provided financial information.
                 </p>
+
+                <div className="mt-4 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    name="consentGiven"
+                    checked={Boolean(formData.consentGiven)}
+                    onChange={handleChange}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="text-sm text-blue-900">
+                    <p>
+                      I confirm that the borrower has been informed of this project's Privacy Notice and consented to
+                      the collection and processing of their data.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivacyNotice(true)}
+                      className="mt-2 text-blue-700 underline hover:text-blue-800"
+                    >
+                      View privacy notice
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -943,13 +978,23 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
           ) : (
             <button
               onClick={handleSubmit}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              disabled={!formData.consentGiven}
+              className={`px-6 py-2 text-white rounded-lg transition-colors ${
+                formData.consentGiven
+                  ? 'bg-green-600 hover:bg-green-700'
+                  : 'bg-green-300 cursor-not-allowed'
+              }`}
             >
               Register Borrower
             </button>
           )}
         </div>
       </div>
+
+      <PrivacyNoticeModal
+        open={showPrivacyNotice}
+        onClose={() => setShowPrivacyNotice(false)}
+      />
       {tempPassword && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full">

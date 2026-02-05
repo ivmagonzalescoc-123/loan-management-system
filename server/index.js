@@ -11,12 +11,8 @@ const bodyLimit = process.env.JSON_BODY_LIMIT || '10mb';
 app.use(express.json({ limit: bodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
 
-init().catch((error) => {
-  console.error('Failed to initialize database schema:', error);
-  process.exit(1);
-});
-
 const PORT = process.env.API_PORT || 5174;
+const PRIVACY_NOTICE_VERSION = process.env.PRIVACY_NOTICE_VERSION || 'v1-2026-02-05';
 
 const generateId = (prefix) => `${prefix}${Date.now().toString().slice(-6)}`;
 
@@ -453,6 +449,60 @@ const runExecute = async (sql, params = []) => {
   return result;
 };
 
+const sanitizeBorrowerRow = (row) => {
+  if (!row || typeof row !== 'object') return row;
+  const { password, passwordUpdatedAt, ...safe } = row;
+  return safe;
+};
+
+const refreshEligibilityForBorrowerApplications = async (borrowerId) => {
+  if (!borrowerId) return { updated: 0 };
+  const applications = await runQuery(
+    `SELECT id, requestedAmount, collateralValue
+     FROM loan_applications
+     WHERE borrowerId = ?
+       AND status IN ("pending", "under_review")`,
+    [borrowerId]
+  );
+
+  let updated = 0;
+  for (const application of applications) {
+    const eligibility = await computeEligibility({
+      borrowerId,
+      requestedAmount: application.requestedAmount,
+      collateralValue: application.collateralValue
+    });
+    if (!eligibility) continue;
+
+    const result = await runExecute(
+      `UPDATE loan_applications
+       SET eligibilityStatus = ?,
+           eligibilityScore = ?,
+           incomeRatio = ?,
+           debtToIncome = ?,
+           riskTier = ?,
+           kycStatus = ?,
+           documentStatus = ?,
+           recommendation = ?
+       WHERE id = ?`,
+      [
+        eligibility.eligibilityStatus || 'pending',
+        eligibility.eligibilityScore || null,
+        eligibility.incomeRatio || null,
+        eligibility.debtToIncome || null,
+        eligibility.riskTier || null,
+        eligibility.kycStatus || 'pending',
+        eligibility.documentStatus || 'missing',
+        eligibility.recommendation || null,
+        application.id
+      ]
+    );
+    updated += Number(result?.affectedRows || 0);
+  }
+
+  return { updated };
+};
+
 const logAudit = async ({ userId, userName, action, entity, entityId, details, ipAddress }) => {
   try {
     const id = generateId('AL');
@@ -658,7 +708,7 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/borrowers', async (req, res) => {
   try {
     const rows = await runQuery('SELECT * FROM borrowers ORDER BY registrationDate DESC');
-    res.json(rows);
+    res.json(rows.map(sanitizeBorrowerRow));
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -672,7 +722,74 @@ app.get('/api/borrowers/:id', async (req, res) => {
     if (!borrower) {
       return res.status(404).send('Borrower not found.');
     }
-    res.json(borrower);
+    res.json(sanitizeBorrowerRow(borrower));
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/api/borrowers/:id/consent', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rows = await runQuery(
+      'SELECT id, consentGiven, consentAt, consentPurpose, consentNoticeVersion FROM borrowers WHERE id = ? LIMIT 1',
+      [id]
+    );
+    const borrower = rows[0];
+    if (!borrower) {
+      return res.status(404).send('Borrower not found.');
+    }
+    res.json({
+      borrowerId: borrower.id,
+      consentGiven: Boolean(borrower.consentGiven),
+      consentAt: borrower.consentAt || null,
+      consentPurpose: borrower.consentPurpose || null,
+      consentNoticeVersion: borrower.consentNoticeVersion || null
+    });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/borrowers/:id/consent', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const payload = req.body || {};
+
+    const consentGiven = payload.consentGiven === true;
+    if (!consentGiven) {
+      return res.status(400).send('consentGiven must be true to record consent.');
+    }
+
+    const consentAt = new Date().toISOString();
+    const consentPurpose = String(
+      payload.consentPurpose || 'Loan processing, internal credit scoring, and account management'
+    ).slice(0, 255);
+    const consentNoticeVersion = String(payload.consentNoticeVersion || PRIVACY_NOTICE_VERSION).slice(0, 50);
+
+    const existing = await runQuery('SELECT id FROM borrowers WHERE id = ? LIMIT 1', [id]);
+    if (!existing[0]) {
+      return res.status(404).send('Borrower not found.');
+    }
+
+    await runExecute(
+      `UPDATE borrowers
+       SET consentGiven = 1,
+           consentAt = ?,
+           consentPurpose = ?,
+           consentNoticeVersion = ?
+       WHERE id = ?`,
+      [consentAt, consentPurpose, consentNoticeVersion, id]
+    );
+
+    await logAudit({
+      action: 'BORROWER_CONSENT_RECORDED',
+      entity: 'BORROWER',
+      entityId: id,
+      details: `Borrower consent recorded. Notice: ${consentNoticeVersion}. Purpose: ${consentPurpose}.`
+    });
+
+    res.json({ ok: true, borrowerId: id, consentAt, consentNoticeVersion });
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -687,6 +804,13 @@ app.get('/api/borrowers/:id/credit-score', async (req, res) => {
     }
 
     await runExecute('UPDATE borrowers SET creditScore = ? WHERE id = ?', [result.score, id]);
+
+    try {
+      await refreshEligibilityForBorrowerApplications(id);
+    } catch {
+      // non-blocking
+    }
+
     res.json(result);
   } catch (error) {
     res.status(500).send(error.message);
@@ -735,19 +859,28 @@ app.get('/api/borrowers/:id/payments', async (req, res) => {
 app.post('/api/borrowers', async (req, res) => {
   try {
     const payload = req.body;
+    if (payload?.consentGiven !== true) {
+      return res.status(400).send('Borrower consent is required (consentGiven: true).');
+    }
     const id = payload.id || generateId('BR');
     const registrationDate = payload.registrationDate || new Date().toISOString().split('T')[0];
     const creditScore = payload.creditScore || 650;
     const status = payload.status || 'active';
     const tempPassword = generateTempPassword();
     const hashedPassword = await hashPassword(tempPassword);
+    const consentAt = new Date().toISOString();
+    const consentPurpose = String(
+      payload.consentPurpose || 'Loan processing, internal credit scoring, and account management'
+    ).slice(0, 255);
+    const consentNoticeVersion = String(payload.consentNoticeVersion || PRIVACY_NOTICE_VERSION).slice(0, 50);
 
     await runExecute(
       `INSERT INTO borrowers (
         id, firstName, lastName, email, phone, dateOfBirth, address, employment,
         monthlyIncome, bankName, accountNumber, accountType, routingNumber, facialImage, idImage, profileImage,
-        password, passwordUpdatedAt, creditScore, status, registrationDate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        password, passwordUpdatedAt, consentGiven, consentAt, consentPurpose, consentNoticeVersion,
+        creditScore, status, registrationDate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         id,
         payload.firstName,
@@ -767,6 +900,10 @@ app.post('/api/borrowers', async (req, res) => {
         payload.profileImage || null,
         hashedPassword,
         new Date().toISOString(),
+        1,
+        consentAt,
+        consentPurpose,
+        consentNoticeVersion,
         creditScore,
         status,
         registrationDate
@@ -864,10 +1001,49 @@ app.get('/api/loan-applications', async (req, res) => {
 app.post('/api/loan-applications', async (req, res) => {
   try {
     const payload = req.body;
+
+    if (payload?.consentAcknowledged !== true) {
+      return res.status(400).send('Consent acknowledgment is required (consentAcknowledged: true).');
+    }
+
+     if (!payload?.borrowerId || !payload?.borrowerName || !payload?.loanType) {
+      return res.status(400).send('borrowerId, borrowerName, and loanType are required.');
+    }
+    if (payload.requestedAmount === undefined || payload.requestedAmount === null) {
+      return res.status(400).send('requestedAmount is required.');
+    }
+
+    const requestedAmount = Number(payload.requestedAmount);
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
+      return res.status(400).send('requestedAmount must be a valid number greater than 0.');
+    }
+
+    const borrowerRows = await runQuery(
+      'SELECT id, creditScore, consentGiven FROM borrowers WHERE id = ? LIMIT 1',
+      [payload.borrowerId]
+    );
+    const borrower = borrowerRows[0];
+    if (!borrower) {
+      return res.status(400).send('Borrower not found.');
+    }
+
+    if (!borrower.consentGiven) {
+      return res.status(400).send('Borrower consent is required before creating a loan application.');
+    }
+
+    const resolvedCreditScore = Number(payload.creditScore ?? borrower.creditScore ?? 0);
+    if (!Number.isFinite(resolvedCreditScore) || resolvedCreditScore <= 0) {
+      return res.status(400).send('creditScore is required and must be a valid number.');
+    }
+
     const id = payload.id || generateId('LA');
     const applicationDate = payload.applicationDate || new Date().toISOString().split('T')[0];
     const status = payload.status || 'pending';
-    const eligibility = await computeEligibility(payload);
+    const eligibility = await computeEligibility({
+      ...payload,
+      requestedAmount,
+      creditScore: resolvedCreditScore
+    });
 
     const columns = [
       'id',
@@ -907,7 +1083,7 @@ app.post('/api/loan-applications', async (req, res) => {
       payload.borrowerId,
       payload.borrowerName,
       payload.loanType,
-      payload.requestedAmount,
+      requestedAmount,
       payload.purpose,
       payload.collateralType || null,
       payload.collateralValue || null,
@@ -920,7 +1096,7 @@ app.post('/api/loan-applications', async (req, res) => {
       payload.approvedAmount || null,
       payload.interestRate || null,
       payload.termMonths || null,
-      payload.creditScore,
+      resolvedCreditScore,
       eligibility?.eligibilityStatus || 'pending',
       eligibility?.eligibilityScore || null,
       eligibility?.incomeRatio || null,
@@ -2359,6 +2535,15 @@ app.post('/api/authorization-codes/consume', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`);
+
+const startServer = async () => {
+  await init();
+  app.listen(PORT, () => {
+    console.log(`API server running on http://localhost:${PORT}`);
+  });
+};
+
+startServer().catch((error) => {
+  console.error('Failed to initialize database schema:', error);
+  process.exit(1);
 });

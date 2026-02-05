@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { User } from '../App';
-import { Search, Plus, Eye, Edit, TrendingUp, TrendingDown, KeyRound } from 'lucide-react';
+import { Search, Plus, Eye, Edit, TrendingUp, TrendingDown, KeyRound, Printer } from 'lucide-react';
 import { Borrower } from '../lib/types';
 import { useBorrowers, useLoans } from '../lib/useApiData';
 import { formatPhp } from '../lib/currency';
 import { BorrowerDetailsModal } from './BorrowerDetailsModal';
 import { AddBorrowerForm } from './AddBorrowerForm';
 import { resetBorrowerPassword, updateBorrower } from '../lib/api';
+import { printBorrowerRegistrationForm } from '../lib/printBorrowerRegistrationForm';
 
 interface BorrowerManagementProps {
   user: User;
@@ -97,13 +98,25 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
           <h2 className="text-gray-900 mb-1">Borrower Management</h2>
           <p className="text-sm text-gray-600">Manage borrower information and credit profiles</p>
         </div>
-        <button 
-          onClick={() => setShowAddBorrowerForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Add Borrower
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => printBorrowerRegistrationForm()}
+            className="px-4 py-2 bg-white text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+            title="Print a blank registration form for physical filling"
+          >
+            <Printer className="w-4 h-4" />
+            Print Registration Form
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAddBorrowerForm(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add Borrower
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

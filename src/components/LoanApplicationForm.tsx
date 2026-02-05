@@ -3,6 +3,7 @@ import { X, User, PhilippinePeso, FileText, Shield, UserCheck } from 'lucide-rea
 import { createLoanApplication } from '../lib/api';
 import { useBorrowers } from '../lib/useApiData';
 import { formatPhp } from '../lib/currency';
+import { PrivacyNoticeModal } from './PrivacyNoticeModal';
 
 interface LoanApplicationFormProps {
   onClose: () => void;
@@ -12,6 +13,7 @@ interface LoanApplicationFormProps {
 export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormProps) {
   const { data: borrowers } = useBorrowers();
   const [step, setStep] = useState(1);
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
 
   const getSuggestedInterestRate = (termMonths: number) => {
     const safeTerm = Number.isFinite(termMonths) ? Math.max(1, termMonths) : 36;
@@ -53,7 +55,8 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
     guarantorPhone: '',
     guarantorEmail: '',
     guarantorAddress: '',
-    guarantorRelationship: ''
+    guarantorRelationship: '',
+    consentAcknowledged: false
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -77,6 +80,11 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
   };
 
   const handleSubmit = async () => {
+    if (!formData.consentAcknowledged) {
+      alert('Consent acknowledgment is required before submitting this application.');
+      return;
+    }
+
     const borrower = borrowers.find(b => b.id === formData.borrowerId);
     if (!borrower) {
       alert('Please select a borrower.');
@@ -105,6 +113,7 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
         loanType: formData.loanType as 'personal' | 'business' | 'mortgage' | 'education' | 'vehicle',
         requestedAmount,
         purpose: formData.purpose,
+        consentAcknowledged: formData.consentAcknowledged,
         termMonths,
         interestRate,
         creditScore: borrower.creditScore,
@@ -545,6 +554,29 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
                 <p className="text-sm text-blue-900">
                   By submitting this application, you confirm that all information provided is accurate and complete.
                 </p>
+
+                <div className="mt-4 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    name="consentAcknowledged"
+                    checked={formData.consentAcknowledged}
+                    onChange={handleChange}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="text-sm text-blue-900">
+                    <p>
+                      I confirm that the borrower has been informed of this project's Privacy Notice and consented to
+                      the collection and processing of their data for loan processing and internal scoring.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivacyNotice(true)}
+                      className="mt-2 text-blue-700 underline hover:text-blue-800"
+                    >
+                      View privacy notice
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -569,13 +601,23 @@ export function LoanApplicationForm({ onClose, onSubmit }: LoanApplicationFormPr
           ) : (
             <button
               onClick={handleSubmit}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              disabled={!formData.consentAcknowledged}
+              className={`px-6 py-2 text-white rounded-lg transition-colors ${
+                formData.consentAcknowledged
+                  ? 'bg-green-600 hover:bg-green-700'
+                  : 'bg-green-300 cursor-not-allowed'
+              }`}
             >
               Submit Application
             </button>
           )}
         </div>
       </div>
+
+      <PrivacyNoticeModal
+        open={showPrivacyNotice}
+        onClose={() => setShowPrivacyNotice(false)}
+      />
     </div>
   );
 }

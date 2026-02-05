@@ -20,14 +20,14 @@ export function WalletPage({ user }: WalletPageProps) {
     {
       id: "BANK-001",
       bankName: "MetroBank",
-      accountName: "Gonzales LMS Holdings",
+      accountName: "GLMS Inc Holdings",
       accountNumber: "123456789012",
       balance: 12500000,
     },
     {
       id: "BANK-002",
       bankName: "BDO",
-      accountName: "Gonzales LMS Operations",
+      accountName: "GLMS Inc Operations",
       accountNumber: "987654321098",
       balance: 7500000,
     },

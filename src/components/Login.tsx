@@ -4,6 +4,8 @@ import { Shield } from 'lucide-react';
 import { loginUser } from '../lib/api';
 import logoUrl from '../../logo.png';
 
+const COMPANY_NAME = import.meta.env.VITE_COMPANY_NAME || 'GLMS Inc';
+
 interface LoginProps {
   onLogin: (user: User) => void;
 }
@@ -38,7 +40,7 @@ export function Login({ onLogin }: LoginProps) {
           <img src={logoUrl} alt="Loan Management System logo" className="w-10 h-10 object-contain" />
         </div>
         
-        <h2 className="text-center text-gray-900 mb-2">Gonzales LMS</h2>
+        <h2 className="text-center text-gray-900 mb-2">{COMPANY_NAME}</h2>
 
         <div className="space-y-4 mb-6">
           <div>

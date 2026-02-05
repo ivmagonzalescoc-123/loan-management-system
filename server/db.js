@@ -47,6 +47,10 @@ async function init() {
       profileImage LONGTEXT,
       password VARCHAR(255),
       passwordUpdatedAt VARCHAR(30),
+      consentGiven TINYINT(1) NOT NULL DEFAULT 0,
+      consentAt VARCHAR(30),
+      consentPurpose VARCHAR(255),
+      consentNoticeVersion VARCHAR(50),
       creditScore INT NOT NULL,
       status VARCHAR(20) NOT NULL,
       registrationDate VARCHAR(20) NOT NULL
@@ -351,6 +355,10 @@ async function init() {
   await addColumnIfMissing('borrowers', 'profileImage LONGTEXT');
   await addColumnIfMissing('borrowers', 'password VARCHAR(255)');
   await addColumnIfMissing('borrowers', 'passwordUpdatedAt VARCHAR(30)');
+  await addColumnIfMissing('borrowers', 'consentGiven TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('borrowers', 'consentAt VARCHAR(30)');
+  await addColumnIfMissing('borrowers', 'consentPurpose VARCHAR(255)');
+  await addColumnIfMissing('borrowers', 'consentNoticeVersion VARCHAR(50)');
   await addColumnIfMissing('users', 'status TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('users', 'archivedAt VARCHAR(30)');
   await addColumnIfMissing('users', 'phone VARCHAR(50)');

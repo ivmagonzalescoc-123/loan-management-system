@@ -41,6 +41,8 @@ import { markNotificationRead } from "./lib/api";
 import { useLoans, useNotifications } from "./lib/useApiData";
 import { getPermissionSettings, isNavAllowed, type PermissionSettings as PermissionSettingsState } from "./lib/permissions";
 
+const COMPANY_NAME = import.meta.env.VITE_COMPANY_NAME || 'GLMS Inc';
+
 export type UserRole =
   | "admin"
   | "manager"
@@ -478,7 +480,7 @@ export default function App() {
               loading="eager"
             />
             <h1 className="font-semibold leading-tight">
-              Gonzales LMS
+              {COMPANY_NAME}
             </h1>
           </div>
 

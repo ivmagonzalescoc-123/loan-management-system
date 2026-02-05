@@ -35,6 +35,9 @@ export interface CreateBorrowerPayload {
   address: string;
   employment: string;
   monthlyIncome: number;
+  consentGiven: boolean;
+  consentPurpose?: string;
+  consentNoticeVersion?: string;
   bankName?: string;
   accountNumber?: string;
   accountType?: string;
@@ -77,6 +80,7 @@ export interface CreateLoanApplicationPayload {
   loanType: 'personal' | 'business' | 'mortgage' | 'education' | 'vehicle';
   requestedAmount: number;
   purpose: string;
+  consentAcknowledged: boolean;
   collateralType?: string;
   collateralValue?: number;
   guarantorName?: string;
