@@ -232,6 +232,7 @@ html {
   --forest-600: #2e7d32;
   --forest-700: #1b5e20;
   --forest-800: #145a1c;
+  --gold-500: #C0B87A;
 }
 
 .bg-blue-50 { background-color: var(--forest-50) !important; }
@@ -268,6 +269,37 @@ html {
   cursor: not-allowed !important;
 }
 
+/* Gold button used on the login screen */
+.btn-gold {
+  background-color: var(--gold-500) !important;
+  color: var(--forest-800) !important;
+  border-color: transparent !important;
+}
+.btn-gold:hover {
+  background-color: var(--gold-500) !important;
+  color: var(--forest-800) !important;
+  filter: brightness(0.96) !important;
+}
+.btn-gold:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* High-contrast forest button variant (use on dark forest backgrounds) */
+.btn-forest-contrast {
+  background-color: var(--forest-50) !important;
+  color: var(--forest-800) !important;
+  border: 1px solid var(--forest-100) !important;
+}
+.btn-forest-contrast:hover {
+  background-color: var(--forest-100) !important;
+  color: var(--forest-800) !important;
+}
+.btn-forest-contrast:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
 /* Header overrides (keep neutral header) */
 .app-header, :root .app-header {
   background-color: #ffffff !important;
@@ -295,6 +327,38 @@ html {
   text-shadow: none;
   box-shadow: none !important;
   transform: none;
+}
+
+/* Login card shadow: wider + darker than Tailwind's shadow-xl */
+.login-card-shadow {
+  box-shadow: 0 32px 70px -24px rgba(0, 0, 0, 0.55), 0 18px 28px -18px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Login inputs: icon inside input (left) + spacing without labels */
+.login-input-wrap {
+  position: relative;
+}
+
+.login-input-icon {
+  position: absolute;
+  left: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-gray-400);
+  pointer-events: none;
+}
+
+.login-input {
+  padding-left: 2.75rem !important;
+  padding-right: 1rem !important;
+}
+
+/* Remove global hover/active lift effects on specific login actions */
+.login-no-hover:hover,
+.login-no-hover:active {
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
 }
 
 /* Ensure main nav hover isn't overridden by earlier :not(.active):hover rules */
