@@ -56,6 +56,16 @@
   DB_PORT=3306
   API_PORT=5174
   VITE_API_URL=http://localhost:5174
+
+  # Optional: file uploads (KYC)
+  # UPLOADS_DIR=server/uploads
+  # KYC_MAX_FILE_BYTES=5242880
+
+  # Optional: credit limit tuning
+  # CREDIT_BASE_INCOME_MULTIPLIER=1.0
+  # CREDIT_STEP_MULTIPLIER=0.25
+  # CREDIT_MAX_INCOME_MULTIPLIER=2.0
+  # CREDIT_DISPOSABLE_MULTIPLIER=6.0
   ```
 
   The server will auto-create tables on startup. A reference schema is in [server/schema.sql](server/schema.sql).

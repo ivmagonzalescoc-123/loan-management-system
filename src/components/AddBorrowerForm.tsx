@@ -561,13 +561,19 @@ export function AddBorrowerForm({ onClose, onSubmit }: AddBorrowerFormProps) {
                   <option value="parttime">Employed (Part-time)</option>
                   <option value="selfemployed">Self-Employed</option>
                   <option value="business">Business Owner</option>
-                  <option value="retired">Retired</option>
+                  <option value="freelancer">Freelancer / Contractor</option>
+                  <option value="retired">Retired / Pensioner</option>
                   <option value="unemployed">Unemployed</option>
                   <option value="student">Student</option>
+                  <option value="homemaker">Homemaker</option>
+                  <option value="other">Other</option>
                 </select>
               </div>
 
-              {formData.employmentStatus !== 'unemployed' && formData.employmentStatus !== 'student' && (
+              {formData.employmentStatus !== 'unemployed' &&
+                formData.employmentStatus !== 'student' &&
+                formData.employmentStatus !== 'retired' &&
+                formData.employmentStatus !== 'homemaker' && (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>

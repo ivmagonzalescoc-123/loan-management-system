@@ -1,7 +1,7 @@
 import { X, TrendingUp, TrendingDown, PhilippinePeso, Calendar, Briefcase } from 'lucide-react';
 import { Borrower } from '../lib/types';
 import { useEffect, useRef, useState } from 'react';
-import { getBorrowerCreditScore } from '../lib/api';
+import { getBorrowerCreditScore, reviewBorrowerKyc } from '../lib/api';
 import { formatPhp } from '../lib/currency';
 
 interface BorrowerDetailsModalProps {
@@ -11,12 +11,22 @@ interface BorrowerDetailsModalProps {
     active: number;
     totalBorrowed: number;
   };
+  reviewer?: {
+    name: string;
+    role: string;
+  };
   onClose: () => void;
 }
 
-export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerDetailsModalProps) {
+export function BorrowerDetailsModal({ borrower, loanStats, reviewer, onClose }: BorrowerDetailsModalProps) {
   const stats = loanStats || { total: 0, active: 0, totalBorrowed: 0 };
   const [score, setScore] = useState(borrower.creditScore);
+  const [kycStatus, setKycStatus] = useState<string>(
+    borrower.kycStatus || (borrower.facialImage && borrower.idImage ? 'verified' : 'pending')
+  );
+  const [kycMessage, setKycMessage] = useState<string | null>(null);
+  const [kycError, setKycError] = useState<string | null>(null);
+  const [kycBusy, setKycBusy] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ src: string; label: string } | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -72,6 +82,60 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
     if (score >= 700) return 'bg-green-600';
     if (score >= 600) return 'bg-yellow-600';
     return 'bg-red-600';
+  };
+
+  const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5174';
+  const resolveImageSrc = (value?: string) => {
+    if (!value) return value;
+    if (value.startsWith('/uploads/')) return `${apiBaseUrl}${value}`;
+    return value;
+  };
+
+  const canReviewKyc = Boolean(
+    reviewer && ['admin', 'manager', 'loan_officer'].includes(reviewer.role)
+  );
+
+  const handleApproveKyc = async () => {
+    if (!reviewer) return;
+    setKycError(null);
+    setKycMessage(null);
+    setKycBusy(true);
+    try {
+      await reviewBorrowerKyc(borrower.id, {
+        decision: 'verified',
+        reviewedBy: reviewer.name,
+        reviewedRole: reviewer.role
+      });
+      setKycStatus('verified');
+      setKycMessage('KYC verified successfully.');
+    } catch (err) {
+      setKycError(err instanceof Error ? err.message : 'Failed to verify KYC.');
+    } finally {
+      setKycBusy(false);
+    }
+  };
+
+  const handleRejectKyc = async () => {
+    if (!reviewer) return;
+    const reason = window.prompt('Reason for rejection (required):');
+    if (!reason) return;
+    setKycError(null);
+    setKycMessage(null);
+    setKycBusy(true);
+    try {
+      await reviewBorrowerKyc(borrower.id, {
+        decision: 'rejected',
+        reviewedBy: reviewer.name,
+        reviewedRole: reviewer.role,
+        reason
+      });
+      setKycStatus('rejected');
+      setKycMessage('KYC rejected.');
+    } catch (err) {
+      setKycError(err instanceof Error ? err.message : 'Failed to reject KYC.');
+    } finally {
+      setKycBusy(false);
+    }
   };
 
   return (
@@ -163,6 +227,46 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
 
           {/* Uploaded Images */}
           <div>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h4 className="text-sm text-gray-600">KYC</h4>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-600">Status:</span>
+                <span className="text-xs font-medium text-gray-900 capitalize">{String(kycStatus).replace('_', ' ')}</span>
+              </div>
+            </div>
+
+            {canReviewKyc && kycStatus === 'submitted' && (
+              <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={handleRejectKyc}
+                  disabled={kycBusy}
+                  className="px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-60"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApproveKyc}
+                  disabled={kycBusy}
+                  className="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60"
+                >
+                  Approve
+                </button>
+              </div>
+            )}
+
+            {kycError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                {kycError}
+              </div>
+            )}
+            {kycMessage && (
+              <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                {kycMessage}
+              </div>
+            )}
+
             <h4 className="text-sm text-gray-600 mb-4">Uploaded Images</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-gray-50 rounded-lg p-4">
@@ -170,7 +274,7 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
                 {borrower.profileImage ? (
                   <div className="space-y-3">
                     <img
-                      src={borrower.profileImage}
+                      src={resolveImageSrc(borrower.profileImage)}
                       alt={`${borrower.firstName} ${borrower.lastName} profile`}
                       className="w-full h-40 object-cover rounded-lg border border-gray-200"
                     />
@@ -178,7 +282,7 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
                       onClick={() => {
                         setPreviewZoom(1);
                         setPreviewImage({
-                          src: borrower.profileImage!,
+                          src: resolveImageSrc(borrower.profileImage!)!,
                           label: 'Profile Photo',
                         });
                       }}
@@ -198,7 +302,7 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
                 {borrower.facialImage ? (
                   <div className="space-y-3">
                     <img
-                      src={borrower.facialImage}
+                      src={resolveImageSrc(borrower.facialImage)}
                       alt={`${borrower.firstName} ${borrower.lastName} facial`}
                       className="w-full h-40 object-cover rounded-lg border border-gray-200"
                     />
@@ -206,7 +310,7 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
                       onClick={() => {
                         setPreviewZoom(1);
                         setPreviewImage({
-                          src: borrower.facialImage!,
+                          src: resolveImageSrc(borrower.facialImage!)!,
                           label: 'Facial Image',
                         });
                       }}
@@ -226,7 +330,7 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
                 {borrower.idImage ? (
                   <div className="space-y-3">
                     <img
-                      src={borrower.idImage}
+                      src={resolveImageSrc(borrower.idImage)}
                       alt={`${borrower.firstName} ${borrower.lastName} ID`}
                       className="w-full h-40 object-cover rounded-lg border border-gray-200"
                     />
@@ -234,7 +338,7 @@ export function BorrowerDetailsModal({ borrower, loanStats, onClose }: BorrowerD
                       onClick={() => {
                         setPreviewZoom(1);
                         setPreviewImage({
-                          src: borrower.idImage!,
+                          src: resolveImageSrc(borrower.idImage!)!,
                           label: 'ID Image',
                         });
                       }}

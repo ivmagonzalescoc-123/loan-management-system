@@ -32,16 +32,51 @@ async function init() {
       id VARCHAR(20) PRIMARY KEY,
       firstName VARCHAR(100) NOT NULL,
       lastName VARCHAR(100) NOT NULL,
+      middleName VARCHAR(100),
       email VARCHAR(150) NOT NULL,
       phone VARCHAR(50) NOT NULL,
+      alternatePhone VARCHAR(50),
       dateOfBirth VARCHAR(20) NOT NULL,
+      gender VARCHAR(20),
+      maritalStatus VARCHAR(20),
+      nationality VARCHAR(100),
+      idFullName VARCHAR(200),
+      idType VARCHAR(50),
+      idNumber VARCHAR(50),
       address VARCHAR(255) NOT NULL,
+      addressLine1 VARCHAR(255),
+      city VARCHAR(100),
+      state VARCHAR(100),
+      zipCode VARCHAR(20),
+      country VARCHAR(100),
+      residenceType VARCHAR(50),
+      yearsAtResidence INT,
       employment VARCHAR(255) NOT NULL,
+      employmentStatus VARCHAR(50),
+      employerName VARCHAR(200),
+      jobTitle VARCHAR(100),
+      industryType VARCHAR(100),
+      employmentDuration VARCHAR(50),
+      workAddress VARCHAR(255),
+      workPhone VARCHAR(50),
       monthlyIncome DECIMAL(12,2) NOT NULL,
+      otherIncomeSource VARCHAR(200),
+      otherIncomeAmount DECIMAL(12,2),
+      monthlyExpenses DECIMAL(12,2) NOT NULL DEFAULT 0,
+      existingDebts DECIMAL(12,2),
       bankName VARCHAR(150),
       accountNumber VARCHAR(50),
       accountType VARCHAR(50),
       routingNumber VARCHAR(50),
+      reference1Name VARCHAR(200),
+      reference1Phone VARCHAR(50),
+      reference1Relationship VARCHAR(100),
+      reference2Name VARCHAR(200),
+      reference2Phone VARCHAR(50),
+      reference2Relationship VARCHAR(100),
+      emergencyContactName VARCHAR(200),
+      emergencyContactPhone VARCHAR(50),
+      emergencyContactRelationship VARCHAR(100),
       facialImage LONGTEXT,
       idImage LONGTEXT,
       profileImage LONGTEXT,
@@ -51,11 +86,69 @@ async function init() {
       consentAt VARCHAR(30),
       consentPurpose VARCHAR(255),
       consentNoticeVersion VARCHAR(50),
+      kycStatus VARCHAR(20) NOT NULL DEFAULT 'pending',
+      kycSubmittedAt VARCHAR(30),
+      kycReviewedAt VARCHAR(30),
+      kycReviewedBy VARCHAR(150),
+      kycReviewedRole VARCHAR(50),
+      kycRejectionReason TEXT,
       creditScore INT NOT NULL,
       status VARCHAR(20) NOT NULL,
       registrationDate VARCHAR(20) NOT NULL
     )
   `);
+
+  const safeAlter = async (sql) => {
+    try {
+      await pool.query(sql);
+    } catch {
+      // ignore (already exists / duplicates / no permissions)
+    }
+  };
+
+  // Lightweight migrations for existing local DBs.
+  await safeAlter('ALTER TABLE borrowers ADD UNIQUE KEY uniq_borrowers_email (email)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN middleName VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN alternatePhone VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN gender VARCHAR(20)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN maritalStatus VARCHAR(20)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN nationality VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN idFullName VARCHAR(200)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN idType VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN idNumber VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN addressLine1 VARCHAR(255)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN city VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN state VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN zipCode VARCHAR(20)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN country VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN residenceType VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN yearsAtResidence INT');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN employmentStatus VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN employerName VARCHAR(200)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN jobTitle VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN industryType VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN employmentDuration VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN workAddress VARCHAR(255)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN workPhone VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN otherIncomeSource VARCHAR(200)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN otherIncomeAmount DECIMAL(12,2)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN monthlyExpenses DECIMAL(12,2) NOT NULL DEFAULT 0');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN existingDebts DECIMAL(12,2)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN reference1Name VARCHAR(200)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN reference1Phone VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN reference1Relationship VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN reference2Name VARCHAR(200)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN reference2Phone VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN reference2Relationship VARCHAR(100)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN emergencyContactName VARCHAR(200)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN emergencyContactPhone VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN emergencyContactRelationship VARCHAR(100)');
+  await safeAlter("ALTER TABLE borrowers ADD COLUMN kycStatus VARCHAR(20) NOT NULL DEFAULT 'pending'");
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN kycSubmittedAt VARCHAR(30)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN kycReviewedAt VARCHAR(30)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN kycReviewedBy VARCHAR(150)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN kycReviewedRole VARCHAR(50)');
+  await safeAlter('ALTER TABLE borrowers ADD COLUMN kycRejectionReason TEXT');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS loan_applications (

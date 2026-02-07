@@ -353,6 +353,27 @@ html {
   padding-right: 1rem !important;
 }
 
+.login-input--toggle {
+  padding-right: 2.75rem !important;
+}
+
+.login-input-toggle {
+  position: absolute;
+  right: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-gray-400);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.login-input-toggle:hover {
+  color: var(--color-gray-600);
+}
+
 /* Remove global hover/active lift effects on specific login actions */
 .login-no-hover:hover,
 .login-no-hover:active {

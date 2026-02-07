@@ -1,4 +1,4 @@
-import { Loan, LoanApproval, LoanClosure, LoanRestructure, LoanTransfer, Notification, Payment } from './types';
+import { Borrower, Loan, LoanApproval, LoanClosure, LoanRestructure, LoanTransfer, Notification, Payment } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5174';
 
@@ -19,6 +19,20 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestFormData<T>(path: string, formData: FormData, options?: Omit<RequestInit, 'body' | 'method'>): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/api${path}`, {
+    method: 'POST',
+    body: formData,
+    ...(options || {})
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Request failed with status ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
 export const apiGet = <T>(path: string) => request<T>(path);
 export const apiPost = <T>(path: string, body: unknown) =>
   request<T>(path, { method: 'POST', body: JSON.stringify(body) });
@@ -35,6 +49,7 @@ export interface CreateBorrowerPayload {
   address: string;
   employment: string;
   monthlyIncome: number;
+  monthlyExpenses?: number;
   consentGiven: boolean;
   consentPurpose?: string;
   consentNoticeVersion?: string;
@@ -46,6 +61,7 @@ export interface CreateBorrowerPayload {
   idImage?: string;
   profileImage?: string;
   creditScore?: number;
+  kycStatus?: 'pending' | 'submitted' | 'verified' | 'rejected';
   status?: 'active' | 'inactive' | 'blacklisted';
   registrationDate?: string;
 }
@@ -64,6 +80,7 @@ export interface UpdateBorrowerPayload {
   address?: string;
   employment?: string;
   monthlyIncome?: number;
+  monthlyExpenses?: number;
   bankName?: string;
   accountNumber?: string;
   accountType?: string;
@@ -202,6 +219,45 @@ export interface LoginResponse {
   role: 'admin' | 'manager' | 'loan_officer' | 'cashier' | 'borrower';
 }
 
+export interface BorrowerRegisterPayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  password: string;
+  consentGiven: boolean;
+  consentPurpose?: string;
+  consentNoticeVersion?: string;
+}
+
+export interface BorrowerKycStatus {
+  borrowerId: string;
+  kycStatus: 'pending' | 'submitted' | 'verified' | 'rejected';
+  kycSubmittedAt?: string | null;
+  kycReviewedAt?: string | null;
+  kycReviewedBy?: string | null;
+  kycReviewedRole?: string | null;
+  kycRejectionReason?: string | null;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  selfieUrl?: string | null;
+  idUrl?: string | null;
+}
+
+export interface BorrowerCreditLimit {
+  borrowerId: string;
+  kycStatus: string;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  completedLoans: number;
+  incomeMultiplier: number;
+  capByIncome: number;
+  capByDisposable: number;
+  maxCredit: number;
+  totalOutstanding: number;
+  availableCredit: number;
+}
+
 export interface CreateUserPayload {
   name: string;
   email: string;
@@ -238,6 +294,23 @@ export const resetUserPasswordByEmail = (email: string) =>
 
 export const resetBorrowerPassword = (email: string) =>
   apiPost<{ tempPassword: string }>('/borrowers/reset-password', { email });
+
+export const registerBorrower = (payload: BorrowerRegisterPayload) =>
+  apiPost<LoginResponse>('/borrowers/register', payload);
+
+export const getBorrowerKyc = (borrowerId: string) =>
+  apiGet<BorrowerKycStatus>(`/borrowers/${borrowerId}/kyc`);
+
+export const submitBorrowerKyc = (borrowerId: string, formData: FormData) =>
+  requestFormData<{ ok: true; borrowerId: string; kycStatus: 'submitted' }>(`/borrowers/${borrowerId}/kyc`, formData);
+
+export const reviewBorrowerKyc = (
+  borrowerId: string,
+  payload: { decision: 'verified' | 'rejected'; reviewedBy: string; reviewedRole: string; reason?: string }
+) => apiPost<{ ok: true; borrowerId: string; kycStatus: string }>(`/borrowers/${borrowerId}/kyc/review`, payload);
+
+export const getBorrowerCreditLimit = (borrowerId: string) =>
+  apiGet<BorrowerCreditLimit>(`/borrowers/${borrowerId}/credit-limit`);
 
 export const createAuthorizationCode = (payload: { applicationId: string; createdBy: string; createdRole: string }) =>
   apiPost<{ code: string; expiresAt: string }>('/authorization-codes', payload);
@@ -282,16 +355,7 @@ export const changeBorrowerPassword = (payload: { email: string; currentPassword
   apiPost<{ ok: true }>('/borrowers/change-password', payload);
 
 export const getBorrowerById = (id: string) =>
-  apiGet<{
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    dateOfBirth: string;
-    address: string;
-    profileImage?: string;
-  }>(`/borrowers/${id}`);
+  apiGet<Borrower>(`/borrowers/${id}`);
 
 export const changeUserPassword = (payload: { email: string; currentPassword: string; newPassword: string }) =>
   apiPost<{ ok: true }>('/users/change-password', payload);

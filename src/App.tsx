@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { BorrowerManagement } from "./components/BorrowerManagement";
 import { LoanApplications } from "./components/LoanApplications";
@@ -13,6 +13,8 @@ import { BorrowerProfile } from "./components/BorrowerProfile";
 import { UserProfile } from "./components/UserProfile";
 import { BorrowerLoanHistory } from "./components/BorrowerLoanHistory";
 import { BorrowerPaymentHistory } from "./components/BorrowerPaymentHistory";
+import { BorrowerKyc } from "./components/BorrowerKyc";
+import { BorrowerLoanApply } from "./components/BorrowerLoanApply";
 import { NotificationsCenter } from "./components/NotificationsCenter";
 import { AlertsCenter } from "./components/AlertsCenter.tsx";
 import { AuditLogs } from "./components/AuditLogs";
@@ -78,7 +80,9 @@ type View =
   | "audit-logs"
   | "system-logs"
   | "borrower-loans"
-  | "borrower-payments";
+  | "borrower-payments"
+  | "borrower-kyc"
+  | "borrower-apply";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -89,6 +93,9 @@ export default function App() {
   );
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  const [notificationsDropdownStyle, setNotificationsDropdownStyle] = useState<
+    React.CSSProperties | undefined
+  >(undefined);
   const [permissionSettings, setPermissionSettings] = useState<PermissionSettingsState>(() => getPermissionSettings());
   const [openNavGroups, setOpenNavGroups] = useState({
     "loan-management": false,
@@ -170,6 +177,49 @@ export default function App() {
     setShowProfileMenu(false);
     setShowNotificationsMenu(false);
   }, [currentView]);
+
+  useLayoutEffect(() => {
+    if (!showNotificationsMenu) return;
+
+    const GUTTER_PX = 16;
+    const TARGET_WIDTH_PX = 500;
+    const VERTICAL_OFFSET_PX = 8; // matches mt-2
+
+    const updatePosition = () => {
+      const buttonEl = notificationsMenuRef.current?.querySelector(
+        "button",
+      ) as HTMLElement | null;
+      if (!buttonEl) return;
+
+      const rect = buttonEl.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+
+      const width = Math.min(
+        TARGET_WIDTH_PX,
+        Math.max(280, viewportWidth - GUTTER_PX * 2),
+      );
+      const desiredLeft = rect.left + rect.width / 2 - width / 2;
+      const left = Math.min(
+        Math.max(desiredLeft, GUTTER_PX),
+        viewportWidth - width - GUTTER_PX,
+      );
+      const top = rect.bottom + VERTICAL_OFFSET_PX;
+
+      setNotificationsDropdownStyle({
+        position: "fixed",
+        top,
+        left,
+        width,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition, { passive: true });
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [showNotificationsMenu]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -257,6 +307,9 @@ export default function App() {
 
   const handleToggleNotifications = async () => {
     const nextOpen = !showNotificationsMenu;
+    if (nextOpen) {
+      setShowProfileMenu(false);
+    }
     setShowNotificationsMenu(nextOpen);
     if (nextOpen && unreadCount > 0) {
       await Promise.all(
@@ -363,6 +416,18 @@ export default function App() {
       id: "borrower-payments" as View,
       label: "Payment History",
       icon: Receipt,
+      roles: ["borrower"],
+    },
+    {
+      id: "borrower-kyc" as View,
+      label: "KYC Verification",
+      icon: Shield,
+      roles: ["borrower"],
+    },
+    {
+      id: "borrower-apply" as View,
+      label: "Apply for Loan",
+      icon: FileText,
       roles: ["borrower"],
     },
   ].filter((item) => isNavAllowed(currentUser.role, item.id, permissionSettings));
@@ -718,8 +783,8 @@ export default function App() {
             </button>
             {showNotificationsMenu && (
               <div
-                className="notifications-dropdown fixed top-20 -translate-x-1/2 w-[500px] bg-white border border-gray-200 rounded-lg shadow-lg z-50"
-                style={{ left: "calc(50% + 10rem)" }}
+                className="notifications-dropdown fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                style={notificationsDropdownStyle}
               >
                 <div className="px-4 py-3 border-b border-gray-100">
                   <div className="text-sm font-semibold text-black-100">
@@ -770,7 +835,10 @@ export default function App() {
           </div>
           <div className="relative inline-flex" ref={profileMenuRef}>
             <button
-              onClick={() => setShowProfileMenu((prev) => !prev)}
+              onClick={() => {
+                setShowNotificationsMenu(false);
+                setShowProfileMenu((prev) => !prev);
+              }}
               className="flex items-center gap-2 px-3 py-2 border border-green-700 rounded-lg width-auto"
             >
               {currentUser.profileImage ? (
@@ -897,6 +965,12 @@ export default function App() {
           )}
           {currentView === "borrower-payments" && (
             <BorrowerPaymentHistory user={currentUser} />
+          )}
+          {currentView === "borrower-kyc" && (
+            <BorrowerKyc user={currentUser} />
+          )}
+          {currentView === "borrower-apply" && (
+            <BorrowerLoanApply user={currentUser} />
           )}
         </div>
       </main>

@@ -249,6 +249,7 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
       {showDetails && selectedBorrower && (
         <BorrowerDetailsModal 
           borrower={selectedBorrower}
+          reviewer={{ name: user.name, role: user.role }}
           loanStats={{
             total: loans.filter(loan => loan.borrowerId === selectedBorrower.id).length,
             active: loans.filter(loan => loan.borrowerId === selectedBorrower.id && loan.status === 'active').length,
@@ -272,12 +273,12 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
 
       {showEditBorrowerForm && editingBorrower && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full">
-            <div className="p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 shrink-0">
               <h3 className="text-gray-900">Edit Borrower</h3>
               <p className="text-sm text-gray-600 mt-1">{editingBorrower.id}</p>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-gray-700 mb-2">First Name</label>
@@ -402,7 +403,7 @@ export function BorrowerManagement({ user }: BorrowerManagementProps) {
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3 shrink-0">
               <button
                 onClick={() => setShowEditBorrowerForm(false)}
                 className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"

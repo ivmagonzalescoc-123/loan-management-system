@@ -76,6 +76,8 @@ export const DEFAULT_NAV_ACCESS: Record<UserRole, Record<string, boolean>> = {
     dashboard: true,
     'borrower-loans': true,
     'borrower-payments': true,
+    'borrower-kyc': true,
+    'borrower-apply': true,
     notifications: true,
     profile: true,
   },

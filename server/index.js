@@ -3,6 +3,9 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { pool, init } = require('./db');
 
 const app = express();
@@ -10,6 +13,15 @@ app.use(cors());
 const bodyLimit = process.env.JSON_BODY_LIMIT || '10mb';
 app.use(express.json({ limit: bodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
+
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
+const KYC_UPLOADS_DIR = path.join(UPLOADS_DIR, 'kyc');
+try {
+  fs.mkdirSync(KYC_UPLOADS_DIR, { recursive: true });
+} catch {
+  // ignore
+}
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 const PORT = process.env.API_PORT || 5174;
 const PRIVACY_NOTICE_VERSION = process.env.PRIVACY_NOTICE_VERSION || 'v1-2026-02-05';
@@ -99,6 +111,98 @@ const generateAuthCode = () => {
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+const toMoney = (value) => {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return 0;
+  return Math.round(num * 100) / 100;
+};
+
+const normalizeNameForMatch = (value) =>
+  String(value || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getNameTokens = (value) => normalizeNameForMatch(value).split(' ').filter(Boolean);
+
+const pickLongestToken = (tokens) => {
+  let best = '';
+  for (const t of tokens) {
+    if (t.length > best.length) best = t;
+  }
+  return best;
+};
+
+const doesIdNameMatchBorrower = ({ borrowerFirstName, borrowerLastName, idFullName }) => {
+  const idNorm = normalizeNameForMatch(idFullName);
+  if (!idNorm) return false;
+
+  const firstTokens = getNameTokens(borrowerFirstName);
+  const lastTokens = getNameTokens(borrowerLastName);
+
+  const firstMain = firstTokens[0] || '';
+  if (!firstMain || firstMain.length < 2) return false;
+  if (!idNorm.includes(firstMain)) return false;
+
+  const lastMain = pickLongestToken(lastTokens.filter(t => t.length >= 3));
+  if (lastMain && !idNorm.includes(lastMain)) return false;
+
+  return true;
+};
+
+const getBorrowerCreditLimit = async (borrowerId) => {
+  const borrowerRows = await runQuery(
+    'SELECT id, monthlyIncome, monthlyExpenses, kycStatus FROM borrowers WHERE id = ? LIMIT 1',
+    [borrowerId]
+  );
+  const borrower = borrowerRows[0];
+  if (!borrower) return null;
+
+  const monthlyIncome = toMoney(borrower.monthlyIncome);
+  const monthlyExpenses = toMoney(borrower.monthlyExpenses);
+  const disposable = Math.max(0, monthlyIncome - monthlyExpenses);
+
+  const completedRows = await runQuery(
+    'SELECT COUNT(*) as count FROM loans WHERE borrowerId = ? AND status = "completed"',
+    [borrowerId]
+  );
+  const completedCount = Number(completedRows[0]?.count || 0);
+
+  const outstandingRows = await runQuery(
+    'SELECT SUM(outstandingBalance) as totalOutstanding FROM loans WHERE borrowerId = ? AND status IN ("active", "defaulted")',
+    [borrowerId]
+  );
+  const totalOutstanding = toMoney(outstandingRows[0]?.totalOutstanding || 0);
+
+  const baseIncomeMultiplier = Number(process.env.CREDIT_BASE_INCOME_MULTIPLIER || 1.0);
+  const stepMultiplier = Number(process.env.CREDIT_STEP_MULTIPLIER || 0.25);
+  const maxIncomeMultiplier = Number(process.env.CREDIT_MAX_INCOME_MULTIPLIER || 2.0);
+  const disposableMultiplier = Number(process.env.CREDIT_DISPOSABLE_MULTIPLIER || 6.0);
+
+  const tier = Math.max(0, completedCount); // increments after each fully paid loan
+  const incomeMultiplier = clamp(baseIncomeMultiplier + tier * stepMultiplier, baseIncomeMultiplier, maxIncomeMultiplier);
+
+  const capByIncome = Math.max(0, monthlyIncome * incomeMultiplier);
+  const capByDisposable = Math.max(0, disposable * disposableMultiplier);
+  const maxCredit = toMoney(Math.min(capByIncome, capByDisposable));
+
+  const availableCredit = toMoney(Math.max(0, maxCredit - totalOutstanding));
+  return {
+    borrowerId,
+    kycStatus: borrower.kycStatus || 'pending',
+    monthlyIncome,
+    monthlyExpenses,
+    completedLoans: completedCount,
+    incomeMultiplier: toMoney(incomeMultiplier),
+    capByIncome: toMoney(capByIncome),
+    capByDisposable: toMoney(capByDisposable),
+    maxCredit,
+    totalOutstanding,
+    availableCredit
+  };
+};
+
 const addDays = (dateStr, days) => {
   const date = dateStr ? new Date(dateStr) : new Date();
   if (Number.isNaN(date.getTime())) return dateStr;
@@ -137,13 +241,14 @@ const calculateLoanTotals = (principal, rate, months, interestType = 'compound')
 
 const getBorrowerKycStatus = (borrower) => {
   if (!borrower) return 'pending';
+  if (borrower.kycStatus) return borrower.kycStatus;
   const hasImages = Boolean(borrower.facialImage && borrower.idImage);
   return hasImages ? 'verified' : 'pending';
 };
 
 const computeEligibility = async (payload) => {
   const borrowerRows = await runQuery(
-    'SELECT id, monthlyIncome, creditScore, facialImage, idImage FROM borrowers WHERE id = ? LIMIT 1',
+    'SELECT id, monthlyIncome, creditScore, facialImage, idImage, kycStatus FROM borrowers WHERE id = ? LIMIT 1',
     [payload.borrowerId]
   );
   const borrower = borrowerRows[0];
@@ -588,7 +693,8 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    const { email, password } = req.body || {};
+    const { password } = req.body || {};
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
     if (!email || !password) {
       return res.status(400).send('Email and password are required.');
     }
@@ -700,6 +806,482 @@ app.post('/api/login', async (req, res) => {
       ipAddress: ipAddress.toString()
     });
     return res.status(401).send('Invalid credentials.');
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/borrowers/register', async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const firstName = String(payload.firstName || '').trim();
+    const lastName = String(payload.lastName || '').trim();
+    const email = String(payload.email || '').trim().toLowerCase();
+    const phone = String(payload.phone || '').trim();
+    const password = String(payload.password || '');
+
+    if (!firstName || !lastName || !email || !phone || !password) {
+      return res.status(400).send('firstName, lastName, email, phone, and password are required.');
+    }
+    if (payload?.consentGiven !== true) {
+      return res.status(400).send('Borrower consent is required (consentGiven: true).');
+    }
+
+    const passwordError = validatePasswordPolicy(password);
+    if (passwordError) {
+      return res.status(400).send(passwordError);
+    }
+
+    const existingUser = await runQuery('SELECT id FROM users WHERE email = ? LIMIT 1', [email]);
+    if (existingUser.length) {
+      return res.status(409).send('Email is already registered.');
+    }
+    const existingBorrower = await runQuery('SELECT id FROM borrowers WHERE email = ? LIMIT 1', [email]);
+    if (existingBorrower.length) {
+      return res.status(409).send('Email is already registered.');
+    }
+
+    const id = generateId('BR');
+    const registrationDate = new Date().toISOString().split('T')[0];
+    const creditScore = 650;
+    const status = 'active';
+    const hashedPassword = await hashPassword(password);
+    const consentAt = new Date().toISOString();
+    const consentPurpose = String(
+      payload.consentPurpose || 'Loan processing, internal credit scoring, and account management'
+    ).slice(0, 255);
+    const consentNoticeVersion = String(payload.consentNoticeVersion || PRIVACY_NOTICE_VERSION).slice(0, 50);
+
+    await runExecute(
+      `INSERT INTO borrowers (
+        id, firstName, lastName, email, phone, dateOfBirth, address, employment,
+        monthlyIncome, monthlyExpenses, facialImage, idImage, profileImage,
+        password, passwordUpdatedAt, consentGiven, consentAt, consentPurpose, consentNoticeVersion,
+        kycStatus, creditScore, status, registrationDate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      [
+        id,
+        firstName,
+        lastName,
+        email,
+        phone,
+        '',
+        '',
+        '',
+        0,
+        0,
+        null,
+        null,
+        null,
+        hashedPassword,
+        new Date().toISOString(),
+        1,
+        consentAt,
+        consentPurpose,
+        consentNoticeVersion,
+        'pending',
+        creditScore,
+        status,
+        registrationDate
+      ]
+    );
+
+    await logAudit({
+      userId: id,
+      userName: `${firstName} ${lastName}`,
+      action: 'BORROWER_SELF_REGISTERED',
+      entity: 'BORROWER',
+      entityId: id,
+      details: `Borrower self-registration completed for ${email}.`
+    });
+
+    return res.json({
+      id,
+      name: `${firstName} ${lastName}`,
+      email,
+      phone,
+      role: 'borrower'
+    });
+  } catch (error) {
+    if (String(error?.message || '').toLowerCase().includes('dup') || String(error?.message || '').toLowerCase().includes('unique')) {
+      return res.status(409).send('Email is already registered.');
+    }
+    return res.status(500).send(error.message);
+  }
+});
+
+const allowedKycReviewerRoles = new Set(['admin', 'manager', 'loan_officer']);
+
+const kycStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const borrowerId = String(req.params?.id || 'unknown');
+    const dir = path.join(KYC_UPLOADS_DIR, borrowerId);
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch {
+      // ignore
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').slice(0, 10) || '.jpg';
+    const base = file.fieldname === 'selfie' ? 'selfie' : file.fieldname === 'id' ? 'id' : 'file';
+    cb(null, `${base}-${Date.now()}${ext}`);
+  }
+});
+
+const kycUpload = multer({
+  storage: kycStorage,
+  limits: { fileSize: Number(process.env.KYC_MAX_FILE_BYTES || 5 * 1024 * 1024) },
+  fileFilter: (req, file, cb) => {
+    const ok = (file.mimetype || '').startsWith('image/');
+    cb(ok ? null : new Error('Only image uploads are allowed.'), ok);
+  }
+});
+
+app.get('/api/borrowers/:id/credit-limit', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = await getBorrowerCreditLimit(id);
+    if (!limit) return res.status(404).send('Borrower not found.');
+    res.json(limit);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/api/borrowers/:id/kyc', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rows = await runQuery(
+      'SELECT id, kycStatus, kycSubmittedAt, kycReviewedAt, kycReviewedBy, kycReviewedRole, kycRejectionReason, monthlyIncome, monthlyExpenses, facialImage, idImage FROM borrowers WHERE id = ? LIMIT 1',
+      [id]
+    );
+    const borrower = rows[0];
+    if (!borrower) return res.status(404).send('Borrower not found.');
+    res.json({
+      borrowerId: borrower.id,
+      kycStatus: borrower.kycStatus || 'pending',
+      kycSubmittedAt: borrower.kycSubmittedAt || null,
+      kycReviewedAt: borrower.kycReviewedAt || null,
+      kycReviewedBy: borrower.kycReviewedBy || null,
+      kycReviewedRole: borrower.kycReviewedRole || null,
+      kycRejectionReason: borrower.kycRejectionReason || null,
+      monthlyIncome: Number(borrower.monthlyIncome || 0),
+      monthlyExpenses: Number(borrower.monthlyExpenses || 0),
+      selfieUrl: borrower.facialImage || null,
+      idUrl: borrower.idImage || null
+    });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/borrowers/:id/kyc', kycUpload.fields([
+  { name: 'selfie', maxCount: 1 },
+  { name: 'id', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const borrowerRows = await runQuery('SELECT id, email, firstName, lastName FROM borrowers WHERE id = ? LIMIT 1', [id]);
+    const borrower = borrowerRows[0];
+    if (!borrower) return res.status(404).send('Borrower not found.');
+
+    const firstName = String(req.body?.firstName || borrower.firstName || '').trim();
+    const middleName = String(req.body?.middleName || '').trim();
+    const lastName = String(req.body?.lastName || borrower.lastName || '').trim();
+    const phone = String(req.body?.phone || '').trim();
+    const alternatePhone = String(req.body?.alternatePhone || '').trim();
+    const dateOfBirth = String(req.body?.dateOfBirth || '').trim();
+    const gender = String(req.body?.gender || '').trim();
+    const maritalStatus = String(req.body?.maritalStatus || '').trim();
+    const nationality = String(req.body?.nationality || '').trim();
+
+    const idFullName = String(req.body?.idFullName || '').trim();
+    const idType = String(req.body?.idType || '').trim();
+    const idNumber = String(req.body?.idNumber || '').trim();
+
+    const addressLine1 = String(req.body?.addressLine1 || '').trim();
+    const city = String(req.body?.city || '').trim();
+    const state = String(req.body?.state || '').trim();
+    const zipCode = String(req.body?.zipCode || '').trim();
+    const country = String(req.body?.country || '').trim();
+    const residenceType = String(req.body?.residenceType || '').trim();
+    const yearsAtResidenceRaw = String(req.body?.yearsAtResidence || '').trim();
+    const yearsAtResidence = yearsAtResidenceRaw === '' ? null : Number.parseInt(yearsAtResidenceRaw, 10);
+
+    const employmentStatus = String(req.body?.employmentStatus || '').trim();
+    const employerName = String(req.body?.employerName || '').trim();
+    const jobTitle = String(req.body?.jobTitle || '').trim();
+    const industryType = String(req.body?.industryType || '').trim();
+    const employmentDuration = String(req.body?.employmentDuration || '').trim();
+    const workAddress = String(req.body?.workAddress || '').trim();
+    const workPhone = String(req.body?.workPhone || '').trim();
+
+    const monthlyIncome = toMoney(req.body?.monthlyIncome);
+    const monthlyExpenses = toMoney(req.body?.monthlyExpenses);
+    const otherIncomeSource = String(req.body?.otherIncomeSource || '').trim();
+    const otherIncomeAmountRaw = String(req.body?.otherIncomeAmount || '').trim();
+    const otherIncomeAmount = otherIncomeAmountRaw === '' ? null : toMoney(otherIncomeAmountRaw);
+    const existingDebtsRaw = String(req.body?.existingDebts || '').trim();
+    const existingDebts = existingDebtsRaw === '' ? null : toMoney(existingDebtsRaw);
+
+    const bankName = String(req.body?.bankName || '').trim();
+    const accountNumber = String(req.body?.accountNumber || '').trim();
+    const accountType = String(req.body?.accountType || '').trim();
+    const routingNumber = String(req.body?.routingNumber || '').trim();
+
+    const reference1Name = String(req.body?.reference1Name || '').trim();
+    const reference1Phone = String(req.body?.reference1Phone || '').trim();
+    const reference1Relationship = String(req.body?.reference1Relationship || '').trim();
+    const reference2Name = String(req.body?.reference2Name || '').trim();
+    const reference2Phone = String(req.body?.reference2Phone || '').trim();
+    const reference2Relationship = String(req.body?.reference2Relationship || '').trim();
+    const emergencyContactName = String(req.body?.emergencyContactName || '').trim();
+    const emergencyContactPhone = String(req.body?.emergencyContactPhone || '').trim();
+    const emergencyContactRelationship = String(req.body?.emergencyContactRelationship || '').trim();
+
+    if (!firstName || !lastName) {
+      return res.status(400).send('firstName and lastName are required.');
+    }
+    if (!phone) {
+      return res.status(400).send('phone is required.');
+    }
+    if (!dateOfBirth) {
+      return res.status(400).send('dateOfBirth is required.');
+    }
+    if (!gender || !maritalStatus || !nationality) {
+      return res.status(400).send('gender, maritalStatus, and nationality are required.');
+    }
+    if (!idFullName || !idType || !idNumber) {
+      return res.status(400).send('idFullName, idType, and idNumber are required.');
+    }
+    if (!doesIdNameMatchBorrower({ borrowerFirstName: firstName, borrowerLastName: lastName, idFullName })) {
+      return res.status(400).send('ID name does not match your registered first/last name. Please update your name or enter the exact full name as shown on your ID.');
+    }
+
+    if (!addressLine1 || !city || !state || !zipCode || !country) {
+      return res.status(400).send('addressLine1, city, state, zipCode, and country are required.');
+    }
+    if (!residenceType) {
+      return res.status(400).send('residenceType is required.');
+    }
+    if (yearsAtResidence === null || !Number.isFinite(yearsAtResidence) || yearsAtResidence < 0) {
+      return res.status(400).send('yearsAtResidence is required and must be >= 0.');
+    }
+
+    if (!employmentStatus) {
+      return res.status(400).send('employmentStatus is required.');
+    }
+    const noEmployerNeeded = new Set(['unemployed', 'student', 'retired', 'homemaker']);
+    if (!noEmployerNeeded.has(employmentStatus)) {
+      if (!employerName || !jobTitle || !employmentDuration) {
+        return res.status(400).send('employerName, jobTitle, and employmentDuration are required for the selected employment status.');
+      }
+    }
+
+    if (!monthlyIncome || monthlyIncome <= 0) {
+      return res.status(400).send('monthlyIncome is required and must be > 0.');
+    }
+    if (monthlyExpenses < 0) {
+      return res.status(400).send('monthlyExpenses must be >= 0.');
+    }
+    if (!bankName || !accountNumber || !accountType) {
+      return res.status(400).send('bankName, accountNumber, and accountType are required.');
+    }
+    if (!reference1Name || !reference1Phone || !reference1Relationship) {
+      return res.status(400).send('Reference 1 (name, phone, relationship) is required.');
+    }
+    if (!reference2Name || !reference2Phone || !reference2Relationship) {
+      return res.status(400).send('Reference 2 (name, phone, relationship) is required.');
+    }
+    if (!emergencyContactName || !emergencyContactPhone || !emergencyContactRelationship) {
+      return res.status(400).send('Emergency contact (name, phone, relationship) is required.');
+    }
+
+    const selfieFile = req.files?.selfie?.[0];
+    const idFile = req.files?.id?.[0];
+    if (!selfieFile || !idFile) {
+      return res.status(400).send('Both selfie and id images are required.');
+    }
+
+    const selfieUrl = `/uploads/kyc/${id}/${path.basename(selfieFile.path)}`;
+    const idUrl = `/uploads/kyc/${id}/${path.basename(idFile.path)}`;
+    const submittedAt = new Date().toISOString();
+
+    const address = [addressLine1, city, state, zipCode, country].filter(Boolean).join(', ');
+    const employment = [jobTitle, employerName, employmentStatus].filter(Boolean).join(' - ');
+
+    await runExecute(
+      `UPDATE borrowers
+       SET firstName = ?,
+           middleName = ?,
+           lastName = ?,
+           phone = ?,
+           alternatePhone = ?,
+           dateOfBirth = ?,
+           gender = ?,
+           maritalStatus = ?,
+           nationality = ?,
+           idFullName = ?,
+           idType = ?,
+           idNumber = ?,
+           address = ?,
+           addressLine1 = ?,
+           city = ?,
+           state = ?,
+           zipCode = ?,
+           country = ?,
+           residenceType = ?,
+           yearsAtResidence = ?,
+           employment = ?,
+           employmentStatus = ?,
+           employerName = ?,
+           jobTitle = ?,
+           industryType = ?,
+           employmentDuration = ?,
+           workAddress = ?,
+           workPhone = ?,
+           monthlyIncome = ?,
+           otherIncomeSource = ?,
+           otherIncomeAmount = ?,
+           monthlyExpenses = ?,
+           existingDebts = ?,
+           bankName = ?,
+           accountNumber = ?,
+           accountType = ?,
+           routingNumber = ?,
+           reference1Name = ?,
+           reference1Phone = ?,
+           reference1Relationship = ?,
+           reference2Name = ?,
+           reference2Phone = ?,
+           reference2Relationship = ?,
+           emergencyContactName = ?,
+           emergencyContactPhone = ?,
+           emergencyContactRelationship = ?,
+           facialImage = ?,
+           idImage = ?,
+           kycStatus = 'submitted',
+           kycSubmittedAt = ?,
+           kycReviewedAt = NULL,
+           kycReviewedBy = NULL,
+           kycReviewedRole = NULL,
+           kycRejectionReason = NULL
+       WHERE id = ?` ,
+      [
+        firstName,
+        middleName || null,
+        lastName,
+        phone,
+        alternatePhone || null,
+        dateOfBirth,
+        gender,
+        maritalStatus,
+        nationality,
+        idFullName,
+        idType,
+        idNumber,
+        address,
+        addressLine1,
+        city,
+        state,
+        zipCode,
+        country,
+        residenceType,
+        yearsAtResidence,
+        employment || 'Not provided',
+        employmentStatus,
+        employerName || null,
+        jobTitle || null,
+        industryType || null,
+        employmentDuration || null,
+        workAddress || null,
+        workPhone || null,
+        monthlyIncome,
+        otherIncomeSource || null,
+        otherIncomeAmount,
+        monthlyExpenses,
+        existingDebts,
+        bankName,
+        accountNumber,
+        accountType,
+        routingNumber || null,
+        reference1Name,
+        reference1Phone,
+        reference1Relationship,
+        reference2Name,
+        reference2Phone,
+        reference2Relationship,
+        emergencyContactName,
+        emergencyContactPhone,
+        emergencyContactRelationship,
+        selfieUrl,
+        idUrl,
+        submittedAt,
+        id
+      ]
+    );
+
+    await logAudit({
+      userId: id,
+      userName: id,
+      action: 'KYC_SUBMITTED',
+      entity: 'BORROWER',
+      entityId: id,
+      details: 'Borrower KYC submitted.'
+    });
+
+    res.json({ ok: true, borrowerId: id, kycStatus: 'submitted' });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/borrowers/:id/kyc/review', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const payload = req.body || {};
+    const decision = String(payload.decision || '').toLowerCase();
+    const reviewedBy = String(payload.reviewedBy || '').trim();
+    const reviewedRole = String(payload.reviewedRole || '').trim();
+    const reason = String(payload.reason || '').trim();
+
+    if (!reviewedBy || !reviewedRole) {
+      return res.status(400).send('reviewedBy and reviewedRole are required.');
+    }
+    if (!allowedKycReviewerRoles.has(reviewedRole)) {
+      return res.status(403).send('Only admin, manager, or loan_officer can review KYC.');
+    }
+    if (decision !== 'verified' && decision !== 'rejected') {
+      return res.status(400).send('decision must be "verified" or "rejected".');
+    }
+    if (decision === 'rejected' && !reason) {
+      return res.status(400).send('reason is required when rejecting KYC.');
+    }
+
+    const reviewedAt = new Date().toISOString();
+    await runExecute(
+      `UPDATE borrowers
+       SET kycStatus = ?,
+           kycReviewedAt = ?,
+           kycReviewedBy = ?,
+           kycReviewedRole = ?,
+           kycRejectionReason = ?
+       WHERE id = ?` ,
+      [decision, reviewedAt, reviewedBy, reviewedRole, decision === 'rejected' ? reason : null, id]
+    );
+
+    await logAudit({
+      userId: reviewedBy,
+      userName: reviewedBy,
+      action: decision === 'verified' ? 'KYC_VERIFIED' : 'KYC_REJECTED',
+      entity: 'BORROWER',
+      entityId: id,
+      details: decision === 'verified' ? 'Borrower KYC verified.' : `Borrower KYC rejected: ${reason}`
+    });
+
+    res.json({ ok: true, borrowerId: id, kycStatus: decision });
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -874,23 +1456,35 @@ app.post('/api/borrowers', async (req, res) => {
     ).slice(0, 255);
     const consentNoticeVersion = String(payload.consentNoticeVersion || PRIVACY_NOTICE_VERSION).slice(0, 50);
 
+    const email = String(payload.email || '').trim().toLowerCase();
+    const existingUser = await runQuery('SELECT id FROM users WHERE email = ? LIMIT 1', [email]);
+    if (existingUser.length) {
+      return res.status(409).send('Email is already registered.');
+    }
+    const existingBorrower = await runQuery('SELECT id FROM borrowers WHERE email = ? LIMIT 1', [email]);
+    if (existingBorrower.length) {
+      return res.status(409).send('Email is already registered.');
+    }
+
     await runExecute(
       `INSERT INTO borrowers (
         id, firstName, lastName, email, phone, dateOfBirth, address, employment,
-        monthlyIncome, bankName, accountNumber, accountType, routingNumber, facialImage, idImage, profileImage,
+        monthlyIncome, monthlyExpenses, bankName, accountNumber, accountType, routingNumber, facialImage, idImage, profileImage,
         password, passwordUpdatedAt, consentGiven, consentAt, consentPurpose, consentNoticeVersion,
+        kycStatus,
         creditScore, status, registrationDate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         id,
         payload.firstName,
         payload.lastName,
-        payload.email,
+        email,
         payload.phone,
         payload.dateOfBirth,
         payload.address,
         payload.employment,
         payload.monthlyIncome,
+        payload.monthlyExpenses || 0,
         payload.bankName || null,
         payload.accountNumber || null,
         payload.accountType || null,
@@ -904,6 +1498,7 @@ app.post('/api/borrowers', async (req, res) => {
         consentAt,
         consentPurpose,
         consentNoticeVersion,
+        payload.kycStatus || 'pending',
         creditScore,
         status,
         registrationDate
@@ -919,6 +1514,9 @@ app.post('/api/borrowers', async (req, res) => {
 
     res.json({ id, tempPassword });
   } catch (error) {
+    if (String(error?.message || '').toLowerCase().includes('dup') || String(error?.message || '').toLowerCase().includes('unique')) {
+      return res.status(409).send('Email is already registered.');
+    }
     res.status(500).send(error.message);
   }
 });
@@ -940,6 +1538,7 @@ app.patch('/api/borrowers/:id', async (req, res) => {
            address = COALESCE(?, address),
            employment = COALESCE(?, employment),
            monthlyIncome = COALESCE(?, monthlyIncome),
+           monthlyExpenses = COALESCE(?, monthlyExpenses),
            bankName = COALESCE(?, bankName),
            accountNumber = COALESCE(?, accountNumber),
            accountType = COALESCE(?, accountType),
@@ -958,6 +1557,7 @@ app.patch('/api/borrowers/:id', async (req, res) => {
         payload.address || null,
         payload.employment || null,
         payload.monthlyIncome || null,
+        payload.monthlyExpenses || null,
         payload.bankName || null,
         payload.accountNumber || null,
         payload.accountType || null,
@@ -1019,7 +1619,7 @@ app.post('/api/loan-applications', async (req, res) => {
     }
 
     const borrowerRows = await runQuery(
-      'SELECT id, creditScore, consentGiven FROM borrowers WHERE id = ? LIMIT 1',
+      'SELECT id, creditScore, consentGiven, kycStatus, monthlyIncome, monthlyExpenses FROM borrowers WHERE id = ? LIMIT 1',
       [payload.borrowerId]
     );
     const borrower = borrowerRows[0];
@@ -1029,6 +1629,23 @@ app.post('/api/loan-applications', async (req, res) => {
 
     if (!borrower.consentGiven) {
       return res.status(400).send('Borrower consent is required before creating a loan application.');
+    }
+
+    if ((borrower.kycStatus || 'pending') !== 'verified') {
+      return res.status(400).send('KYC verification is required before applying for a loan.');
+    }
+
+    const limit = await getBorrowerCreditLimit(payload.borrowerId);
+    if (!limit) {
+      return res.status(400).send('Borrower not found.');
+    }
+    if (!limit.monthlyIncome || limit.monthlyIncome <= 0) {
+      return res.status(400).send('Borrower monthly income must be provided as part of KYC.');
+    }
+    if (requestedAmount > Number(limit.availableCredit || 0)) {
+      return res.status(400).send(
+        `Requested amount exceeds available credit. Available credit: ${limit.availableCredit}`
+      );
     }
 
     const resolvedCreditScore = Number(payload.creditScore ?? borrower.creditScore ?? 0);
@@ -1893,6 +2510,26 @@ app.post('/api/payments', async (req, res) => {
       message: `${loan.borrowerName} made a payment of ${payload.amount}.`,
       severity: status === 'late' ? 'warning' : 'info',
       referenceKey: `payment-${id}-manager`
+    });
+
+    await createNotification({
+      targetRole: 'cashier',
+      loanId: loan.id,
+      type: 'payment_received',
+      title: 'Payment received',
+      message: `${loan.borrowerName} made a payment of ${payload.amount}.`,
+      severity: status === 'late' ? 'warning' : 'info',
+      referenceKey: `payment-${id}-cashier`
+    });
+
+    await createNotification({
+      targetRole: 'admin',
+      loanId: loan.id,
+      type: 'payment_received',
+      title: 'Payment received',
+      message: `${loan.borrowerName} made a payment of ${payload.amount}.`,
+      severity: status === 'late' ? 'warning' : 'info',
+      referenceKey: `payment-${id}-admin`
     });
 
     const borrowerId = loan.borrowerId;
