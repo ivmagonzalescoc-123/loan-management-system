@@ -20,6 +20,7 @@ import { AlertsCenter } from "./components/AlertsCenter.tsx";
 import { AuditLogs } from "./components/AuditLogs";
 import { SystemLogs } from "./components/SystemLogs";
 import { WalletPage } from "./components/WalletPage.tsx";
+import { GlobalLoadingOverlay } from "./components/GlobalLoadingOverlay";
 import logoUrl from "../logo.png";
 import {
   LayoutDashboard,
@@ -272,7 +273,12 @@ export default function App() {
   }, [currentView]);
 
   if (!currentUser) {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <>
+        <Login onLogin={handleLogin} />
+        <GlobalLoadingOverlay />
+      </>
+    );
   }
 
   const isBorrower = currentUser.role === "borrower";
@@ -768,18 +774,12 @@ export default function App() {
           <div className="relative" ref={notificationsMenuRef}>
             <button
               onClick={handleToggleNotifications}
-              className="relative flex items-center justify-center w-10 h-10 border border-green-700 rounded-lg"
+              className={`notification-button relative flex items-center justify-center w-10 h-10 border border-green-700 rounded-lg ${unreadCount > 0 ? "is-unread" : ""}`}
               aria-label="Open notifications"
             >
-              <Bell className="w-5 h-5 text-green-100" />
-              {unreadCount > 0 && (
-                <>
-                  <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500" />
-                  <span className="absolute top-0 right-0 translate-x-1/3 -translate-y-1/3 h-5 min-w-[22px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
-                    +{unreadCount > 9 ? "9" : unreadCount}
-                  </span>
-                </>
-              )}
+              <Bell
+                className={`notification-bell-icon w-5 h-5 ${unreadCount > 0 ? "is-unread" : ""}`}
+              />
             </button>
             {showNotificationsMenu && (
               <div
@@ -974,6 +974,7 @@ export default function App() {
           )}
         </div>
       </main>
+      <GlobalLoadingOverlay />
     </div>
   );
 }

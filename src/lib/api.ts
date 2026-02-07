@@ -1,36 +1,77 @@
 import { Borrower, Loan, LoanApproval, LoanClosure, LoanRestructure, LoanTransfer, Notification, Payment } from './types';
+import { globalLoading } from './globalLoading';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5174';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}/api${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers || {})
-    },
-    ...options
-  });
+  const method = String(options?.method || 'GET').toUpperCase();
+  const shouldShowGlobalLoading = method !== 'GET';
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || `Request failed with status ${response.status}`);
+  const isPaymentCreate = method === 'POST' && path === '/payments';
+  const isDisbursementCreate = method === 'POST' && path === '/loans';
+  const shouldFlashResult = isPaymentCreate || isDisbursementCreate;
+  const loadingLabel = isPaymentCreate
+    ? 'Recording payment…'
+    : isDisbursementCreate
+      ? 'Disbursing loan…'
+      : undefined;
+
+  if (shouldShowGlobalLoading) globalLoading.inc({ label: loadingLabel });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options?.headers || {})
+      },
+      ...options
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      if (shouldFlashResult) {
+        const title = isPaymentCreate ? 'Payment failed' : 'Disbursement failed';
+        globalLoading.flashError(title, errorText || `Request failed with status ${response.status}`);
+      }
+
+      throw new Error(errorText || `Request failed with status ${response.status}`);
+    }
+
+    const json = await response.json() as T;
+
+    if (shouldFlashResult) {
+      const title = isPaymentCreate ? 'Payment recorded' : 'Loan disbursed';
+      globalLoading.flashSuccess(title);
+    }
+
+    return json;
+  } finally {
+    if (shouldShowGlobalLoading) globalLoading.dec();
   }
-
-  return response.json() as Promise<T>;
 }
 
 async function requestFormData<T>(path: string, formData: FormData, options?: Omit<RequestInit, 'body' | 'method'>): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}/api${path}`, {
-    method: 'POST',
-    body: formData,
-    ...(options || {})
-  });
+  globalLoading.inc({ label: 'Uploading…' });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api${path}`, {
+      method: 'POST',
+      body: formData,
+      ...(options || {})
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || `Request failed with status ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      globalLoading.flashError('Upload failed', errorText || `Request failed with status ${response.status}`);
+      throw new Error(errorText || `Request failed with status ${response.status}`);
+    }
+
+    const json = await response.json() as T;
+    globalLoading.flashSuccess('Upload complete');
+    return json;
+  } finally {
+    globalLoading.dec();
   }
-  return response.json() as Promise<T>;
 }
 
 export const apiGet = <T>(path: string) => request<T>(path);
