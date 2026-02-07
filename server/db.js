@@ -329,6 +329,26 @@ async function init() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_reset_requests (
+      id VARCHAR(20) PRIMARY KEY,
+      email VARCHAR(150) NOT NULL,
+      accountType VARCHAR(20) NOT NULL,
+      accountId VARCHAR(20) NOT NULL,
+      otpHash VARCHAR(255) NOT NULL,
+      attempts INT NOT NULL DEFAULT 0,
+      createdAt VARCHAR(30) NOT NULL,
+      expiresAt VARCHAR(30) NOT NULL,
+      usedAt VARCHAR(30),
+      ipAddress VARCHAR(50),
+      resetTokenHash VARCHAR(64),
+      resetTokenExpiresAt VARCHAR(30),
+      resetTokenUsedAt VARCHAR(30),
+      KEY idx_password_reset_email_created (email, createdAt),
+      KEY idx_password_reset_email_used (email, usedAt)
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS authorization_codes (
       id VARCHAR(20) PRIMARY KEY,
       applicationId VARCHAR(20) NOT NULL,
@@ -385,6 +405,17 @@ async function init() {
     }
   };
 
+  const addIndexIfMissing = async (table, indexDef) => {
+    try {
+      await pool.query(`ALTER TABLE ${table} ADD ${indexDef}`);
+    } catch (error) {
+      const message = error?.message || '';
+      if (!message.includes('Duplicate key name') && !message.includes('Duplicate index')) {
+        throw error;
+      }
+    }
+  };
+
   try {
     await pool.query('ALTER TABLE notifications ADD COLUMN targetRole VARCHAR(30)');
   } catch {
@@ -392,6 +423,24 @@ async function init() {
   }
   await addColumnIfMissing('notifications', 'actorName VARCHAR(150)');
   await addColumnIfMissing('notifications', 'actorProfileImage LONGTEXT');
+
+  // Lightweight migrations for existing local DBs.
+  // (Earlier versions may have created password_reset_requests with only id/email indexes.)
+  await addColumnIfMissing('password_reset_requests', 'email VARCHAR(150) NOT NULL');
+  await addColumnIfMissing('password_reset_requests', 'accountType VARCHAR(20) NOT NULL');
+  await addColumnIfMissing('password_reset_requests', 'accountId VARCHAR(20) NOT NULL');
+  await addColumnIfMissing('password_reset_requests', 'otpHash VARCHAR(255) NOT NULL');
+  await addColumnIfMissing('password_reset_requests', 'attempts INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('password_reset_requests', 'createdAt VARCHAR(30) NOT NULL');
+  await addColumnIfMissing('password_reset_requests', 'expiresAt VARCHAR(30) NOT NULL');
+  await addColumnIfMissing('password_reset_requests', 'usedAt VARCHAR(30)');
+  await addColumnIfMissing('password_reset_requests', 'ipAddress VARCHAR(50)');
+  await addColumnIfMissing('password_reset_requests', 'resetTokenHash VARCHAR(64)');
+  await addColumnIfMissing('password_reset_requests', 'resetTokenExpiresAt VARCHAR(30)');
+  await addColumnIfMissing('password_reset_requests', 'resetTokenUsedAt VARCHAR(30)');
+
+  await addIndexIfMissing('password_reset_requests', 'INDEX idx_password_reset_email_created (email, createdAt)');
+  await addIndexIfMissing('password_reset_requests', 'INDEX idx_password_reset_email_used (email, usedAt)');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS loan_transfers (

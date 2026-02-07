@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { User } from '../App';
-import { loginUser, registerBorrower } from '../lib/api';
+import { loginUser, registerBorrower, requestPasswordResetOtp, resetPasswordWithOtpToken, verifyPasswordResetOtp } from '../lib/api';
 import { PrivacyNoticeModal } from './PrivacyNoticeModal';
 import logoUrl from '../../logo.png';
 
@@ -54,6 +54,42 @@ export function Login({ onLogin }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
+
+  const [forgotStep, setForgotStep] = useState<'request' | 'verify' | 'reset' | 'done'>('request');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotEmailMasked, setForgotEmailMasked] = useState<string | null>(null);
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotInlineOtp, setForgotInlineOtp] = useState<string | null>(null);
+  const [forgotResetToken, setForgotResetToken] = useState<string | null>(null);
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
+  const [showForgotConfirmPassword, setShowForgotConfirmPassword] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  useEffect(() => {
+    if (forgotStep !== 'verify') return;
+    if (!forgotInlineOtp) return;
+    if (forgotOtp && forgotOtp.trim().length > 0) return;
+    setForgotOtp(forgotInlineOtp);
+  }, [forgotInlineOtp, forgotOtp, forgotStep]);
+
+  const resetForgotState = (seedEmail?: string) => {
+    const seeded = (seedEmail ?? email ?? '').trim();
+    setForgotStep('request');
+    setForgotEmail(seeded);
+    setForgotEmailMasked(null);
+    setForgotOtp('');
+    setForgotInlineOtp(null);
+    setForgotResetToken(null);
+    setForgotNewPassword('');
+    setForgotConfirmPassword('');
+    setShowForgotNewPassword(false);
+    setShowForgotConfirmPassword(false);
+    setForgotError(null);
+    setForgotLoading(false);
+  };
 
   const handleLogin = async () => {
     setError(null);
@@ -240,7 +276,10 @@ export function Login({ onLogin }: LoginProps) {
           ) : (
             <button
               type="button"
-              onClick={() => setShowForgotPassword(true)}
+              onClick={() => {
+                resetForgotState();
+                setShowForgotPassword(true);
+              }}
               className="text-sm text-green-700 text-center w-full mb-2 login-no-hover"
             >
               Forgot password?
@@ -300,7 +339,281 @@ export function Login({ onLogin }: LoginProps) {
           }}
         >
           <div className="bg-white rounded-xl shadow-xl modal-inner p-4">
-            <p className="text-sm text-gray-600 mb-4">Contact your local administrator to change your password.</p>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="text-gray-900 font-semibold">Reset password</div>
+              <button
+                type="button"
+                className="text-sm text-gray-600 hover:text-gray-900"
+                onClick={() => setShowForgotPassword(false)}
+                disabled={forgotLoading}
+              >
+                Close
+              </button>
+            </div>
+
+            {forgotStep === 'request' && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Enter your email. We’ll send a 6-digit OTP code.
+                </p>
+
+                <div className="login-input-wrap">
+                  <Mail className="login-input-icon" size={18} aria-hidden="true" />
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    aria-label="Email"
+                    className="w-full py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 login-input"
+                  />
+                </div>
+
+                {forgotError && (
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                    {forgotError}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={forgotLoading}
+                  className="w-full btn-forest py-2 rounded-lg transition-colors disabled:opacity-60"
+                  style={{ backgroundColor: 'var(--forest-700)', color: '#fff' }}
+                  onClick={async () => {
+                    setForgotError(null);
+                    setForgotLoading(true);
+                    try {
+                      const response = await requestPasswordResetOtp(forgotEmail.trim().toLowerCase());
+                      setForgotEmailMasked(response.emailMasked || null);
+                      if (response.otp) {
+                        setForgotInlineOtp(response.otp);
+                        setForgotOtp(response.otp);
+                      }
+                      setForgotStep('verify');
+                    } catch (err) {
+                      setForgotError(err instanceof Error ? err.message : 'Failed to send OTP');
+                    } finally {
+                      setForgotLoading(false);
+                    }
+                  }}
+                >
+                  {forgotLoading ? 'Sending OTP…' : 'Send OTP'}
+                </button>
+              </div>
+            )}
+
+            {forgotStep === 'verify' && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Enter the OTP sent to <span className="font-medium text-gray-800">{forgotEmailMasked || forgotEmail}</span>.
+                </p>
+
+
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={forgotOtp}
+                  onChange={(e) => setForgotOtp(e.target.value)}
+                  maxLength={6}
+                  placeholder="6-digit OTP"
+                  aria-label="OTP"
+                  className="w-full py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 px-3"
+                />
+
+                {forgotError && (
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                    {forgotError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={forgotLoading}
+                    className="w-full py-2 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-60"
+                    onClick={() => {
+                      resetForgotState(forgotEmail);
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={forgotLoading}
+                    className="w-full btn-forest py-2 rounded-lg transition-colors disabled:opacity-60"
+                    style={{ backgroundColor: 'var(--forest-700)', color: '#fff' }}
+                    onClick={async () => {
+                      setForgotError(null);
+                      setForgotLoading(true);
+                      try {
+                        const response = await verifyPasswordResetOtp(
+                          forgotEmail.trim().toLowerCase(),
+                          forgotOtp.trim()
+                        );
+                        setForgotEmailMasked(response.emailMasked || forgotEmailMasked);
+                        setForgotResetToken(response.resetToken);
+                        setForgotStep('reset');
+                      } catch (err) {
+                        setForgotError(err instanceof Error ? err.message : 'OTP verification failed');
+                      } finally {
+                        setForgotLoading(false);
+                      }
+                    }}
+                  >
+                    {forgotLoading ? 'Verifying…' : 'Verify'}
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={forgotLoading}
+                  className="text-sm text-green-700 text-center w-full login-no-hover disabled:opacity-60"
+                  onClick={async () => {
+                    setForgotError(null);
+                    setForgotLoading(true);
+                    try {
+                      const response = await requestPasswordResetOtp(forgotEmail.trim().toLowerCase());
+                      setForgotEmailMasked(response.emailMasked || null);
+                      setForgotOtp('');
+                      setForgotInlineOtp(response.otp || null);
+                      if (response.otp) setForgotOtp(response.otp);
+                    } catch (err) {
+                      setForgotError(err instanceof Error ? err.message : 'Failed to resend OTP');
+                    } finally {
+                      setForgotLoading(false);
+                    }
+                  }}
+                >
+                  Resend OTP
+                </button>
+              </div>
+            )}
+
+            {forgotStep === 'reset' && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Set a new password for <span className="font-medium text-gray-800">{forgotEmailMasked || forgotEmail}</span>.
+                </p>
+
+                <div className="login-input-wrap">
+                  <Lock className="login-input-icon" size={18} aria-hidden="true" />
+                  <input
+                    type={showForgotNewPassword ? 'text' : 'password'}
+                    value={forgotNewPassword}
+                    onChange={(e) => setForgotNewPassword(e.target.value)}
+                    placeholder="New password"
+                    aria-label="New password"
+                    className="w-full py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 login-input login-input--toggle"
+                  />
+                  <button
+                    type="button"
+                    className="login-input-toggle"
+                    aria-label={showForgotNewPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowForgotNewPassword((v) => !v)}
+                  >
+                    {showForgotNewPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+                  </button>
+                </div>
+
+                <div className="login-input-wrap">
+                  <Lock className="login-input-icon" size={18} aria-hidden="true" />
+                  <input
+                    type={showForgotConfirmPassword ? 'text' : 'password'}
+                    value={forgotConfirmPassword}
+                    onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    aria-label="Confirm new password"
+                    className="w-full py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 login-input login-input--toggle"
+                  />
+                  <button
+                    type="button"
+                    className="login-input-toggle"
+                    aria-label={showForgotConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    onClick={() => setShowForgotConfirmPassword((v) => !v)}
+                  >
+                    {showForgotConfirmPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+                  </button>
+                </div>
+
+                {forgotError && (
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                    {forgotError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={forgotLoading}
+                    className="w-full py-2 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-60"
+                    onClick={() => {
+                      setForgotError(null);
+                      setForgotStep('verify');
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={forgotLoading}
+                    className="w-full btn-forest py-2 rounded-lg transition-colors disabled:opacity-60"
+                    style={{ backgroundColor: 'var(--forest-700)', color: '#fff' }}
+                    onClick={async () => {
+                      setForgotError(null);
+                      const policyError = validatePasswordPolicy(forgotNewPassword);
+                      if (policyError) {
+                        setForgotError(policyError);
+                        return;
+                      }
+                      if (forgotNewPassword !== forgotConfirmPassword) {
+                        setForgotError('Passwords do not match.');
+                        return;
+                      }
+                      if (!forgotResetToken) {
+                        setForgotError('Reset token missing. Please verify OTP again.');
+                        setForgotStep('verify');
+                        return;
+                      }
+
+                      setForgotLoading(true);
+                      try {
+                        await resetPasswordWithOtpToken(
+                          forgotEmail.trim().toLowerCase(),
+                          forgotResetToken,
+                          forgotNewPassword
+                        );
+                        setForgotStep('done');
+                      } catch (err) {
+                        setForgotError(err instanceof Error ? err.message : 'Password reset failed');
+                      } finally {
+                        setForgotLoading(false);
+                      }
+                    }}
+                  >
+                    {forgotLoading ? 'Saving…' : 'Reset password'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {forgotStep === 'done' && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-700">Password updated. You can now sign in.</p>
+                <button
+                  type="button"
+                  className="w-full btn-forest py-2 rounded-lg transition-colors"
+                  style={{ backgroundColor: 'var(--forest-700)', color: '#fff' }}
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                  }}
+                >
+                  Back to sign in
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

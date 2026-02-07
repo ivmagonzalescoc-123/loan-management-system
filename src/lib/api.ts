@@ -336,6 +336,18 @@ export const resetUserPasswordByEmail = (email: string) =>
 export const resetBorrowerPassword = (email: string) =>
   apiPost<{ tempPassword: string }>('/borrowers/reset-password', { email });
 
+export const requestPasswordResetOtp = (email: string) =>
+  apiPost<{ ok: true; emailMasked: string; otp?: string; delivery?: 'inline' | 'email' }>('/auth/forgot-password', { email });
+
+export const verifyPasswordResetOtp = (email: string, otp: string) =>
+  apiPost<{ ok: true; emailMasked: string; resetToken: string; resetTokenExpiresAt: string }>(
+    '/auth/verify-otp',
+    { email, otp }
+  );
+
+export const resetPasswordWithOtpToken = (email: string, resetToken: string, newPassword: string) =>
+  apiPost<{ ok: true }>('/auth/reset-password', { email, resetToken, newPassword });
+
 export const registerBorrower = (payload: BorrowerRegisterPayload) =>
   apiPost<LoginResponse>('/borrowers/register', payload);
 

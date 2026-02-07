@@ -231,6 +231,24 @@ CREATE TABLE IF NOT EXISTS login_logs (
   createdAt VARCHAR(30) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_requests (
+  id VARCHAR(20) PRIMARY KEY,
+  email VARCHAR(150) NOT NULL,
+  accountType VARCHAR(20) NOT NULL,
+  accountId VARCHAR(20) NOT NULL,
+  otpHash VARCHAR(255) NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  createdAt VARCHAR(30) NOT NULL,
+  expiresAt VARCHAR(30) NOT NULL,
+  usedAt VARCHAR(30),
+  ipAddress VARCHAR(50),
+  resetTokenHash VARCHAR(64),
+  resetTokenExpiresAt VARCHAR(30),
+  resetTokenUsedAt VARCHAR(30),
+  KEY idx_password_reset_email_created (email, createdAt),
+  KEY idx_password_reset_email_used (email, usedAt)
+);
+
 CREATE TABLE IF NOT EXISTS authorization_codes (
   id VARCHAR(20) PRIMARY KEY,
   applicationId VARCHAR(20) NOT NULL,

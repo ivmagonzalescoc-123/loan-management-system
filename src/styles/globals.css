@@ -504,9 +504,9 @@ html {
 .app-header .notification-button.is-unread:active,
 .app-header .notification-button.is-unread:focus,
 .app-header .notification-button.is-unread:focus-visible {
-  background-color: #dc2626 !important;
-  border-color: #dc2626 !important;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25) !important;
+  background-color: #2cdc26 !important;
+  border-color: #2cdc26 !important;
+  box-shadow: 0 0 0 3px rgba(44, 220, 38, 0.25) !important;
 }
 
 .app-header .notification-button.is-unread svg {

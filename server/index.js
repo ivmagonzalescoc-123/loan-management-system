@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -26,7 +27,25 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 const PORT = process.env.API_PORT || 5174;
 const PRIVACY_NOTICE_VERSION = process.env.PRIVACY_NOTICE_VERSION || 'v1-2026-02-05';
 
+const COMPANY_NAME = process.env.COMPANY_NAME || process.env.APP_NAME || 'Loan Management System';
+
 const generateId = (prefix) => `${prefix}${Date.now().toString().slice(-6)}`;
+
+const maskEmail = (email) => {
+  const value = String(email || '').trim();
+  const atIndex = value.indexOf('@');
+  if (atIndex <= 0) return value ? '***' : '';
+  const local = value.slice(0, atIndex);
+  const domain = value.slice(atIndex + 1);
+  const maskedLocal = local.length <= 2 ? `${local[0] || '*'}*` : `${local.slice(0, 2)}***`;
+  const domainParts = domain.split('.');
+  const domainName = domainParts[0] || '';
+  const domainTld = domainParts.slice(1).join('.') || '';
+  const maskedDomainName = domainName.length <= 2 ? `${domainName[0] || '*'}*` : `${domainName.slice(0, 2)}***`;
+  const maskedDomain = domainTld ? `${maskedDomainName}.${domainTld}` : maskedDomainName;
+  return `${maskedLocal}@${maskedDomain}`;
+};
+
 
 const PASSWORD_POLICY = {
   minLength: 8,
@@ -554,6 +573,56 @@ const runExecute = async (sql, params = []) => {
   return result;
 };
 
+const OTP_POLICY = {
+  codeLength: 6,
+  ttlMinutes: Number(process.env.PASSWORD_RESET_OTP_TTL_MINUTES || 10),
+  maxAttempts: Number(process.env.PASSWORD_RESET_OTP_MAX_ATTEMPTS || 5),
+  maxPerHour: Number(process.env.PASSWORD_RESET_OTP_MAX_PER_HOUR || 3),
+  resetTokenTtlMinutes: Number(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES || 15)
+};
+
+const getOtpDeliveryMode = () => {
+  const value = String(process.env.PASSWORD_RESET_OTP_DELIVERY || 'email').trim().toLowerCase();
+  return value === 'inline' ? 'inline' : 'email';
+};
+
+const isValidEmail = (value) => {
+  const email = String(value || '').trim().toLowerCase();
+  if (!email || email.length > 150) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+const generateOtpCode = () => {
+  const code = crypto.randomInt(0, 10 ** OTP_POLICY.codeLength)
+    .toString()
+    .padStart(OTP_POLICY.codeLength, '0');
+  return code;
+};
+
+const sha256Hex = (value) => crypto.createHash('sha256').update(String(value || '')).digest('hex');
+
+const findAccountByEmail = async (email) => {
+  const normalized = String(email || '').trim().toLowerCase();
+  const userRows = await runQuery('SELECT id, email, name FROM users WHERE email = ? LIMIT 1', [normalized]);
+  if (userRows[0]) {
+    return { accountType: 'user', id: userRows[0].id, email: userRows[0].email, displayName: userRows[0].name || 'User' };
+  }
+  const borrowerRows = await runQuery(
+    'SELECT id, email, firstName, lastName FROM borrowers WHERE email = ? LIMIT 1',
+    [normalized]
+  );
+  if (borrowerRows[0]) {
+    const b = borrowerRows[0];
+    return {
+      accountType: 'borrower',
+      id: b.id,
+      email: b.email,
+      displayName: `${b.firstName || ''} ${b.lastName || ''}`.trim() || 'Borrower'
+    };
+  }
+  return null;
+};
+
 const sanitizeBorrowerRow = (row) => {
   if (!row || typeof row !== 'object') return row;
   const { password, passwordUpdatedAt, ...safe } = row;
@@ -808,6 +877,208 @@ app.post('/api/login', async (req, res) => {
     return res.status(401).send('Invalid credentials.');
   } catch (error) {
     res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    if (!isValidEmail(email)) {
+      return res.status(400).send('Please enter a valid email address.');
+    }
+
+    const deliveryMode = getOtpDeliveryMode();
+    if (deliveryMode !== 'inline') {
+      return res.status(400).send('Email delivery is disabled. Set PASSWORD_RESET_OTP_DELIVERY=inline.');
+    }
+
+    const ipAddress = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString();
+    const nowIso = new Date().toISOString();
+    const oneHourAgoIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    try {
+      const recentRows = await runQuery(
+        'SELECT COUNT(*) as count FROM password_reset_requests WHERE email = ? AND createdAt >= ?',
+        [email, oneHourAgoIso]
+      );
+      const recentCount = Number(recentRows[0]?.count || 0);
+      if (recentCount >= OTP_POLICY.maxPerHour) {
+        return res.json({ ok: true, emailMasked: maskEmail(email) });
+      }
+    } catch {
+      // if table not available (misconfigured DB), fall through to generic ok
+    }
+
+    const account = await findAccountByEmail(email);
+    if (!account) {
+      // avoid account enumeration
+      return res.json({ ok: true, emailMasked: maskEmail(email) });
+    }
+
+    const code = generateOtpCode();
+    const otpHash = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + OTP_POLICY.ttlMinutes * 60 * 1000).toISOString();
+    const requestId = generateId('PR');
+
+    await runExecute(
+      `INSERT INTO password_reset_requests (
+        id, email, accountType, accountId, otpHash, attempts, createdAt, expiresAt, usedAt,
+        ipAddress, resetTokenHash, resetTokenExpiresAt, resetTokenUsedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      [
+        requestId,
+        email,
+        account.accountType,
+        account.id,
+        otpHash,
+        0,
+        nowIso,
+        expiresAt,
+        null,
+        ipAddress,
+        null,
+        null,
+        null
+      ]
+    );
+
+    return res.json({ ok: true, emailMasked: maskEmail(email), otp: code, delivery: 'inline' });
+  } catch (error) {
+    return res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/auth/verify-otp', async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    const otp = String((req.body || {}).otp || '').trim();
+    if (!isValidEmail(email) || !otp || otp.length > 20) {
+      return res.status(400).send('Invalid request.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const rows = await runQuery(
+      `SELECT id, otpHash, attempts, expiresAt, usedAt, accountType, accountId
+       FROM password_reset_requests
+       WHERE email = ? AND usedAt IS NULL
+       ORDER BY createdAt DESC
+       LIMIT 1`,
+      [email]
+    );
+    const request = rows[0];
+    if (!request || !request.expiresAt || String(request.expiresAt) < nowIso) {
+      return res.status(400).send('Invalid or expired code.');
+    }
+
+    const attempts = Number(request.attempts || 0);
+    if (attempts >= OTP_POLICY.maxAttempts) {
+      return res.status(400).send('Invalid or expired code.');
+    }
+
+    const ok = await bcrypt.compare(otp, request.otpHash);
+    if (!ok) {
+      const nextAttempts = attempts + 1;
+      await runExecute(
+        'UPDATE password_reset_requests SET attempts = ? WHERE id = ?',
+        [nextAttempts, request.id]
+      );
+      return res.status(400).send('Invalid or expired code.');
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = sha256Hex(resetToken);
+    const resetTokenExpiresAt = new Date(Date.now() + OTP_POLICY.resetTokenTtlMinutes * 60 * 1000).toISOString();
+    const usedAt = nowIso;
+
+    await runExecute(
+      `UPDATE password_reset_requests
+       SET usedAt = ?, resetTokenHash = ?, resetTokenExpiresAt = ?, resetTokenUsedAt = NULL
+       WHERE id = ?`,
+      [usedAt, resetTokenHash, resetTokenExpiresAt, request.id]
+    );
+
+    return res.json({
+      ok: true,
+      emailMasked: maskEmail(email),
+      resetToken,
+      resetTokenExpiresAt
+    });
+  } catch (error) {
+    return res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    const resetToken = String((req.body || {}).resetToken || '').trim();
+    const newPassword = String((req.body || {}).newPassword || '');
+    if (!isValidEmail(email) || !resetToken || resetToken.length < 20) {
+      return res.status(400).send('Invalid request.');
+    }
+
+    const policyError = validatePasswordPolicy(newPassword);
+    if (policyError) {
+      return res.status(400).send(policyError);
+    }
+
+    const nowIso = new Date().toISOString();
+    const tokenHash = sha256Hex(resetToken);
+    const rows = await runQuery(
+      `SELECT id, accountType, accountId, resetTokenHash, resetTokenExpiresAt, resetTokenUsedAt
+       FROM password_reset_requests
+       WHERE email = ?
+       ORDER BY createdAt DESC
+       LIMIT 5`,
+      [email]
+    );
+
+    const match = rows.find(r =>
+      r &&
+      String(r.resetTokenHash || '') === tokenHash &&
+      r.resetTokenUsedAt == null &&
+      r.resetTokenExpiresAt &&
+      String(r.resetTokenExpiresAt) >= nowIso
+    );
+
+    if (!match) {
+      return res.status(400).send('Invalid or expired reset token.');
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    if (match.accountType === 'user') {
+      await runExecute('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, match.accountId]);
+      await logAudit({
+        userId: match.accountId,
+        userName: email,
+        action: 'USER_PASSWORD_RESET',
+        entity: 'USER',
+        entityId: match.accountId,
+        details: `Password reset via OTP for ${email}.`
+      });
+    } else {
+      await runExecute(
+        'UPDATE borrowers SET password = ?, passwordUpdatedAt = ? WHERE id = ?',
+        [hashedPassword, new Date().toISOString(), match.accountId]
+      );
+      await logAudit({
+        userId: match.accountId,
+        userName: email,
+        action: 'BORROWER_PASSWORD_RESET',
+        entity: 'BORROWER',
+        entityId: match.accountId,
+        details: `Password reset via OTP for ${email}.`
+      });
+    }
+
+    await runExecute(
+      'UPDATE password_reset_requests SET resetTokenUsedAt = ? WHERE id = ?',
+      [nowIso, match.id]
+    );
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).send(error.message);
   }
 });
 
@@ -1231,6 +1502,42 @@ app.post('/api/borrowers/:id/kyc', kycUpload.fields([
       entityId: id,
       details: 'Borrower KYC submitted.'
     });
+
+    // Notify admin, manager, and loan officers about the new KYC submission
+    try {
+      const borrowerName = `${firstName} ${lastName}`.trim();
+      await createNotification({
+        borrowerId: id,
+        targetRole: 'admin',
+        type: 'kyc_submitted',
+        title: 'KYC submitted',
+        message: `${borrowerName} submitted KYC and requires review.`,
+        severity: 'info',
+        referenceKey: `kyc-${id}-admin`
+      });
+
+      await createNotification({
+        borrowerId: id,
+        targetRole: 'manager',
+        type: 'kyc_submitted',
+        title: 'KYC submitted',
+        message: `${borrowerName} submitted KYC and requires review.`,
+        severity: 'info',
+        referenceKey: `kyc-${id}-manager`
+      });
+
+      await createNotification({
+        borrowerId: id,
+        targetRole: 'loan_officer',
+        type: 'kyc_submitted',
+        title: 'KYC submitted',
+        message: `${borrowerName} submitted KYC and requires review.`,
+        severity: 'info',
+        referenceKey: `kyc-${id}-loan_officer`
+      });
+    } catch (e) {
+      // swallow notification errors so KYC submission isn't blocked
+    }
 
     res.json({ ok: true, borrowerId: id, kycStatus: 'submitted' });
   } catch (error) {

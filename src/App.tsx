@@ -83,6 +83,7 @@ type View =
   | "borrower-loans"
   | "borrower-payments"
   | "borrower-kyc"
+  | "kyc"
   | "borrower-apply";
 
 export default function App() {
@@ -419,6 +420,12 @@ export default function App() {
       roles: ["borrower"],
     },
     {
+      id: "kyc" as View,
+      label: "KYC Verification",
+      icon: Shield,
+      roles: ["manager", "loan_officer"],
+    },
+    {
       id: "borrower-payments" as View,
       label: "Payment History",
       icon: Receipt,
@@ -482,6 +489,11 @@ export default function App() {
           id: "borrowers" as View,
           label: "Borrowers",
           icon: Users,
+        },
+        {
+          id: "kyc" as View,
+          label: "KYC Verification",
+          icon: Shield,
         },
         {
           id: "loan-continuity" as View,
@@ -967,6 +979,9 @@ export default function App() {
             <BorrowerPaymentHistory user={currentUser} />
           )}
           {currentView === "borrower-kyc" && (
+            <BorrowerKyc user={currentUser} />
+          )}
+          {currentView === "kyc" && (
             <BorrowerKyc user={currentUser} />
           )}
           {currentView === "borrower-apply" && (
